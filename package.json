@@ -1,0 +1,16 @@
+{
+  "name": "dentenplay-hub",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/hub",
+    "apps/exam",
+    "services/gateway"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w apps/hub",
+    "build": "node scripts/build.mjs",
+    "typecheck": "npm run typecheck -w apps/exam && npm run typecheck -w apps/hub && npm run typecheck -w services/gateway",
+    "test": "npm test -w apps/exam && npm test -w services/gateway"
+  }
+}
