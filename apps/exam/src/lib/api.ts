@@ -43,6 +43,13 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
       throw new ApiError('FORBIDDEN', 'คุณไม่มีสิทธิ์เข้าถึงส่วนนี้');
     }
 
+    // A non-JSON 2xx means the API is not really there (e.g. the Vite dev server answering /api/* with
+    // index.html). Treat it as "unreachable" instead of as an empty-but-valid response — otherwise
+    // /me resolves to {} and the app thinks a role-less user is logged in (403 on every page).
+    if (res.ok && res.status !== 204 && !(res.headers.get('content-type') ?? '').includes('json')) {
+      throw new Error('API did not return JSON (is the Hub API running?)');
+    }
+
     const json = await res.json().catch(() => ({}));
     if (!res.ok) {
       const code = typeof json.error === 'string'
