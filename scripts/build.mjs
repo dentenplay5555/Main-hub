@@ -38,7 +38,7 @@ const notFound = `<!doctype html>
   (function () {
     var base = ${JSON.stringify(base)};
     var p = location.pathname;
-    if (p.indexOf(base + 'exam/') === 0) {
+    if (${includeExam} && p.indexOf(base + 'exam/') === 0) {
       var sub = p.slice((base + 'exam').length);
       location.replace(base + 'exam/?r=' + encodeURIComponent(sub + location.search + location.hash));
       return;
