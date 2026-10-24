@@ -68,6 +68,22 @@ npm run dev         # รัน Hub
    ```
    (anon key ใน Dashboard เดิมขึ้นต้นด้วย `eyJhbGciOiJIUzI1NiIs` = HS256 จึงน่าจะต้องใช้ `SUPABASE_JWT_SECRET`)
 
+## Deploy หน้าเว็บ (GitHub Pages)
+
+Workflow `.github/workflows/deploy-pages.yml` ทดสอบ (`npm test`) แล้ว build และ deploy ให้เองทุกครั้งที่ push เข้า `master`
+เว็บอยู่ที่ `https://<user>.github.io/<ชื่อ repo>/`
+
+ตั้งครั้งเดียวที่ GitHub:
+1. Settings → Pages → Build and deployment → Source = **GitHub Actions**
+2. repo ต้องเป็น **public** (Pages ของ repo private ใช้ฟรีไม่ได้ ต้องมีแผนเสียเงิน) ดูรายการตรวจก่อนเปิด public ในหัวข้อความปลอดภัย
+
+**ขึ้นทีละนิด:** เริ่มต้นเว็บมีแค่ Hub ส่วน exam ถูกซ่อน (tile ขึ้น "เร็ว ๆ นี้" และไม่ถูกเผยแพร่) เมื่อพร้อมเปิด
+ให้ไปที่ Settings → Secrets and variables → Actions → **Variables** แล้วเพิ่ม
+- `INCLUDE_EXAM` = `1` เผยแพร่หน้า exam และเปิด tile ใน Hub
+- `VITE_API_BASE` = origin ของ API ที่ exam จะเรียก (ว่างไว้ได้ถ้ายังไม่มี)
+
+แล้วรัน workflow ซ้ำ (Actions → Deploy to GitHub Pages → Run workflow) แอปใหม่ ๆ ให้เพิ่มทำตามรูปแบบเดียวกันนี้
+
 ## ยังไม่ได้ทำ (v0.1)
 
 - rate limit ต่อผู้ใช้ และกฎจำนวนครั้งที่ส่ง (Pretest 1, Cycle 1/2 รอบละ 3, Post Test 1) ที่ต้องบังคับฝั่ง gateway/DB
@@ -75,10 +91,16 @@ npm run dev         # รัน Hub
 - ย้าย engine CbKST จาก `apps/exam/server/cbkst.ts` เข้า gateway
 - Learning System (รวม Dashboard), Weather, Music Player ยังเป็น "เร็ว ๆ นี้" ใน Hub
 - ตัวสลับแอปมีเฉพาะหน้า Hub ยังไม่ได้ฝังในแต่ละแอป
-- `scripts/build.mjs` ยังเป็นแบบ GitHub Pages (base path + 404.html) ต้องปรับเมื่อเลือกวิธี deploy หน้าเว็บบน Cloudflare
+- ล็อกอินของ exam บน GitHub Pages: API คนละโดเมนกับหน้าเว็บ ทำให้ cookie ใช้ไม่ได้ ต้องย้ายมาใช้ token ผ่าน gateway ก่อนค่อยตั้ง `INCLUDE_EXAM=1`
 
 ## ความปลอดภัย
 
 - อย่าใส่ `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_JWT_SECRET`, `.env` ลง repo (`.gitignore` กันไว้แล้ว)
 - ตาราง `submissions` เปิด RLS และไม่มี policy เลย anon key / ผู้ใช้ทั่วไปอ่านเขียนตรง ๆ ไม่ได้ มีแต่ gateway ที่เข้าถึงได้
 - ข้อมูลนักเรียน (ชื่อ อีเมล คะแนน) ต้องอยู่ในฐานข้อมูลเท่านั้น ห้ามฝังในไฟล์ HTML/JS หรือ commit ลง repo ที่จะเป็น public
+
+**ก่อนเปลี่ยน repo เป็น public** (Settings → General → Danger Zone → Change visibility):
+- [ ] ค้นใน repo และประวัติ git ว่าไม่มี key/รหัสผ่าน/ชื่อ-อีเมล-คะแนนนักเรียนจริง (`git log -p | grep -iE "secret|password|@student"`)
+- [ ] ไม่มีไฟล์ `.env`, `.dev.vars` หรือไฟล์ข้อมูลนักเรียน (เช่น export จาก PRISM) ถูก commit
+- [ ] ถ้าเคย commit secret แล้ว ต้องเปลี่ยน key ใหม่ ไม่ใช่แค่ลบไฟล์ (ประวัติยังเห็นอยู่)
+- [ ] `SUPABASE_URL` และ anon key เปิดเผยได้ แต่ `service_role` / `JWT secret` ห้ามอยู่ใน repo
