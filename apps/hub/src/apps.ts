@@ -1,4 +1,6 @@
 const base = import.meta.env.BASE_URL;
+// Set by scripts/build.mjs (INCLUDE_EXAM=1). Off = the exam tile shows as "เร็ว ๆ นี้" and is not published.
+const includeExam = import.meta.env.VITE_INCLUDE_EXAM === '1';
 
 export interface AppEntry {
   id: string;
@@ -18,7 +20,7 @@ export const apps: AppEntry[] = [
     name: 'Exam Management',
     description: 'รายงานผลและติดตามแบบฝึกหัด สำหรับนักเรียน ครู และผู้ดูแล',
     color: '#38bdf8',
-    href: `${base}exam/`,
+    href: includeExam ? `${base}exam/` : undefined,
   },
   {
     id: 'learning',

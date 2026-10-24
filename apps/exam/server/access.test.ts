@@ -26,7 +26,7 @@ test('secret: missing or short secret is rejected (fail closed)', () => {
 test('role: explicit lists only, no substring guessing, no defaults', () => {
   assert.equal(resolveRole('admin@nssc.ac.th', ENV), 'dev');
   assert.equal(resolveRole('teacher1@nssc.ac.th', ENV), 'teacher');
-  assert.equal(resolveRole('52335.benten@student.nssc.ac.th', ENV), 'student');
+  assert.equal(resolveRole('52001.sample@student.nssc.ac.th', ENV), 'student');
   // looks like a teacher/dev but is not listed
   assert.equal(resolveRole('teacher@student.nssc.ac.th', ENV), 'student');
   assert.equal(resolveRole('dev@student.nssc.ac.th', ENV), 'student');
