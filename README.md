@@ -1,7 +1,7 @@
 # dentenplay-hub
 
-รวมเว็บแอปไว้ใน repo เดียว (monorepo) มีหน้า Hub พร้อมเมนูตารางจุดสำหรับสลับแอปแบบ Google
-และมี **gateway** (Cloudflare Worker) เป็นด่านเดียวที่คุยกับฐานข้อมูล Supabase
+รวมเว็บแอปไว้ใน repo เดียว (monorepo) มีหน้า Hub พร้อมเมนูตารางจุดสำหรับสลับแอปแบบ Google spp
+และมี **gateway** (Cloudflare Worker) เป็นด่านเดียวที่คุยกับฐานข้อมูล Supabase 
 
 ```
 Hub (apps/hub)    Exercise Web (แยก)    เว็บอื่น ๆ
