@@ -32,7 +32,8 @@ async function get<T>(session: Session, path: string): Promise<T> {
 
 export interface Me { email: string; role: 'teacher' | 'student' }
 export interface Profile { name: string | null; klass: string | null; no: string | null }
-export interface OverviewItem { id: string; user_email: string; exercise_id: string | null; created_at: string; profile: Profile; scores: ScoreRow[] }
+export interface OverviewItem { id: string; user_email: string; exercise_id: string | null; created_at: string; profile: Profile; in_roster?: boolean; scores: ScoreRow[] }
+export interface Overview { items: OverviewItem[]; missing: Profile[] }
 
 const ex = EXERCISE_ID ? `exercise_id=${encodeURIComponent(EXERCISE_ID)}` : '';
 
@@ -46,5 +47,5 @@ export const api = {
     const d = await get<{ item: { created_at: string; scores: ScoreRow[] } }>(s, `/v1/my/submissions/${id}`);
     return d.item;
   },
-  overview: (s: Session) => get<{ items: OverviewItem[] }>(s, `/v1/teacher/overview${ex ? `?${ex}` : ''}`).then((r) => r.items),
+  overview: (s: Session) => get<Overview>(s, `/v1/teacher/overview${ex ? `?${ex}` : ''}`).then((r) => ({ items: r.items, missing: r.missing ?? [] })),
 };

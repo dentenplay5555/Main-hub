@@ -47,6 +47,8 @@ async function detail(env: Env, id: string, ownerId?: string) {
 }
 
 type PartRow = { part_key: string; data: unknown };
+type Profile = { name: string | null; klass: string | null; no: string | null };
+type RosterRow = { class: string | null; class_number: number | null; full_name: string | null; student_emails?: unknown };
 
 const str = (v: unknown): string | null => (typeof v === 'string' || typeof v === 'number') && String(v).trim() ? String(v).trim().slice(0, 128) : null;
 const field = (o: Record<string, unknown>, ...keys: string[]) => {
@@ -130,38 +132,56 @@ export function registerReadRoutes(app: Hono<{ Bindings: Env; Variables: { user:
     return c.json({ ok: true, items: rows });
   });
 
-  // One row per student: their newest submission with the name/class/number they reported and all scores.
-  // The raw material for the room report (the dashboard computes levels/flags from these scores).
+  // One row per student: their newest submission with name/class/number and all scores, plus the roster
+  // students who have not submitted. Name/class/number come from the roster (students + student_emails)
+  // when the email matches, otherwise from what the exercise web reported.
   app.get('/v1/teacher/overview', async (c) => {
     requireTeacher(c);
     const ex = safe(c.req.query('exercise_id'));
-    const rows = await selectRows<{
-      id: string;
-      user_email: string;
-      exercise_id: string | null;
-      created_at: string;
-      submission_parts: PartRow[];
-      part_scores: Array<{ part_key: string; path: string; criterion: string; score: number }>;
-    }>(
-      c.env,
-      'raw_submissions',
-      `select=id,user_email,exercise_id,created_at,submission_parts(part_key,data),part_scores(part_key,path,criterion,score)&submission_parts.part_key=in.(info,_meta)${ex ? `&exercise_id=eq.${ex}` : ''}&order=created_at.desc&limit=${limitOf(c, 1000, 2000)}`,
-    );
+    const [rows, rosterRows] = await Promise.all([
+      selectRows<{
+        id: string;
+        user_email: string;
+        exercise_id: string | null;
+        created_at: string;
+        submission_parts: PartRow[];
+        part_scores: Array<{ part_key: string; path: string; criterion: string; score: number }>;
+      }>(
+        c.env,
+        'raw_submissions',
+        `select=id,user_email,exercise_id,created_at,submission_parts(part_key,data),part_scores(part_key,path,criterion,score)&submission_parts.part_key=in.(info,_meta)${ex ? `&exercise_id=eq.${ex}` : ''}&order=created_at.desc&limit=${limitOf(c, 1000, 2000)}`,
+      ),
+      selectRows<RosterRow>(c.env, 'students', 'select=class,class_number,full_name,student_emails(email)&limit=1000'),
+    ]);
+
+    const roster = new Map<string, Profile>(); // lower-cased email -> roster profile
+    const everyone: Array<{ key: string; profile: Profile }> = [];
+    for (const r of rosterRows) {
+      const emails = ([] as Array<{ email?: string }>).concat((r.student_emails as never) ?? []);
+      const profile: Profile = { name: str(r.full_name), klass: str(r.class), no: str(r.class_number) };
+      const key = (emails[0]?.email ?? `${profile.klass}/${profile.no}`).toLowerCase();
+      everyone.push({ key, profile });
+      for (const e of emails) if (e?.email) roster.set(e.email.toLowerCase(), profile);
+    }
+
     const seen = new Set<string>();
     const items = [];
     for (const r of rows) {
       const key = r.user_email.toLowerCase();
       if (seen.has(key)) continue; // newest first, so the first one wins
       seen.add(key);
+      const reported = profileFrom(r.submission_parts ?? []);
       items.push({
         id: r.id,
         user_email: r.user_email,
         exercise_id: r.exercise_id,
         created_at: r.created_at,
-        profile: profileFrom(r.submission_parts ?? []),
+        profile: roster.get(key) ?? reported,
+        in_roster: roster.has(key),
         scores: r.part_scores ?? [],
       });
     }
-    return c.json({ ok: true, items });
+    const missing = everyone.filter((e) => !seen.has(e.key)).map((e) => e.profile);
+    return c.json({ ok: true, items, missing });
   });
 }

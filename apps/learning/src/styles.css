@@ -71,6 +71,7 @@ select, input { padding: 8px 10px; border-radius: 10px; border: 1px solid var(--
 .fl { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: .7rem; font-weight: 700; color: #fff; } .fl.lucky { background: var(--warn); } .fl.careless { background: var(--bad); }
 .pad { padding: 14px; } .detail h2 small { font-weight: 400; font-size: .85rem; }
 
+details.missing summary { cursor: pointer; } details.missing ul { list-style: none; margin: 10px 0 0; padding: 0; columns: 2 260px; } details.missing li { padding: 2px 0; }
 @media print {
   .noprint { display: none !important; }
   body { background: #fff; color: #000; } .card { break-inside: avoid; border-color: #bbb; } .list, .filters, .stats, .bars { display: none; }

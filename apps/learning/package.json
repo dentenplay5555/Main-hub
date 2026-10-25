@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "typecheck": "tsc -b",
-    "test": "node --test src/lib/diagnose.test.ts"
+    "test": "node --test src/lib/diagnose.test.ts src/lib/csv.test.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.4",

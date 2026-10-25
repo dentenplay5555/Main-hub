@@ -103,7 +103,7 @@ Workflow `.github/workflows/deploy-pages.yml` ทดสอบ (`npm test`) แ�
 ## Learning System (`apps/learning`)
 
 - นักเรียน: ล็อกอิน Google (Supabase Auth) → เห็นเรดาร์ 5 ทักษะ ระดับ (Beginner / Structure OK / Language Dev / Mastery) คะแนน x/9 สัญญาณเตือน (Lucky / Careless) ขั้นตอนต่อไป และเหรียญรางวัล
-- ครู (อีเมลใน `TEACHER_EMAILS`): ภาพรวมห้อง การกระจายคะแนน ตัวกรองห้อง/ระดับ/ธง ค้นหา และรายงานรายบุคคลแบบเดียวกับที่นักเรียนเห็น
+- ครู (อีเมลใน `TEACHER_EMAILS`): ภาพรวมห้อง การกระจายคะแนน ตัวกรองห้อง/ระดับ/ธง ค้นหา รายงานรายบุคคลแบบเดียวกับที่นักเรียนเห็น รายชื่อคนที่ยังไม่ส่ง และดาวน์โหลด CSV (ชื่อ/ห้อง/เลขที่ใช้จากตาราง `students` + `student_emails` ใน Supabase ถ้าอีเมลตรงกัน ไม่งั้นใช้ที่เว็บแบบฝึกรายงาน)
 - กฎวินิจฉัยอยู่ที่ `apps/learning/src/lib/diagnose.ts` (มีเทสต์) ย้ายจากหน้า PRISM เดิมและ view ใน Supabase: ใช้คะแนน TR/ME/LR/GRA/CC ของกลุ่มล่าสุดที่ครบทั้ง 5 ด้าน (เช่น `drafts/d3`) ถ้าไม่ครบจะไม่เดาระดับ
 - ตั้งค่า (ไม่ลับทั้งหมด): `VITE_GATEWAY_URL`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_KEY` (publishable key), `VITE_EXERCISE_ID` (ว่าง = ทุกแบบฝึก)
 - เปิดบนเว็บ: repo Variable `INCLUDE_LEARNING=1` แล้วรัน workflow ซ้ำ และเพิ่ม URL ของเว็บ (เช่น `https://<user>.github.io/Main-hub/learning/`) ใน Supabase → Authentication → URL Configuration → Redirect URLs
