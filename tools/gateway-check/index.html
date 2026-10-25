@@ -38,7 +38,7 @@
 
 <div class="row"><div>หรือวาง token เอง (ไม่ต้องล็อกอิน)</div><input id="manual" placeholder="eyJ..."></div>
 
-<pre id="out">ผลลัพธ์จะขึ้นที่นี่ (หน้านี้เวอร์ชัน 2)</pre>
+<pre id="out">ผลลัพธ์จะขึ้นที่นี่ (หน้านี้เวอร์ชัน 3)</pre>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script>
@@ -57,20 +57,16 @@
   async function token() {
     const m = $('manual').value.trim();
     if (m) return m;
-    const { data, error } = await sb.auth.getSession();
-    if (error) throw error;
-    return data.session ? data.session.access_token : null;
+    return current ? current.access_token : null;
   }
 
-  async function refreshWho() {
-    const { data } = await sb.auth.getSession();
-    $('who').textContent = data.session ? data.session.user.email : 'ยังไม่ได้ล็อกอิน';
-  }
+  let current = null; // latest session, kept from the auth callback (never call supabase APIs inside it)
+  function showWho() { $('who').textContent = current ? current.user.email : 'ยังไม่ได้ล็อกอิน'; }
 
   $('login').onclick = () => sb.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: location.origin + location.pathname } });
-  $('logout').onclick = async () => { await sb.auth.signOut(); refreshWho(); out('ออกจากระบบแล้ว'); };
-  sb.auth.onAuthStateChange(refreshWho);
-  refreshWho();
+  $('logout').onclick = async () => { await sb.auth.signOut(); current = null; showWho(); out('ออกจากระบบแล้ว'); };
+  // INITIAL_SESSION / SIGNED_IN / TOKEN_REFRESHED all deliver the session here.
+  sb.auth.onAuthStateChange((_event, session) => { current = session; showWho(); });
 
   const SAMPLE = {
     sheet: 'Submissions',
@@ -92,13 +88,16 @@
     const headers = { Authorization: 'Bearer ' + t };
     if (body !== undefined) { headers['Content-Type'] = 'application/json'; headers['Idempotency-Key'] = 'check-' + Date.now(); }
     try {
-      const res = await fetch($('gw').value.replace(/\/$/, '') + path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
+      const ctl = new AbortController();
+      const timer = setTimeout(() => ctl.abort(), 20000);
+      const res = await fetch($('gw').value.replace(/\/$/, '') + path, { method, headers, signal: ctl.signal, body: body === undefined ? undefined : JSON.stringify(body) });
+      clearTimeout(timer);
       const text = await res.text();
       let json; try { json = JSON.parse(text); } catch { json = text; }
       if (json && json.id) lastId = json.id;
       if (json && json.items && json.items[0] && json.items[0].id) lastId = json.items[0].id;
       out({ status: res.status, body: json });
-    } catch (e) { out('เรียกไม่สำเร็จ (เครือข่าย/CORS): ' + e.message); }
+    } catch (e) { out('เรียกไม่สำเร็จ (เครือข่าย/CORS/หมดเวลา 20 วิ): ' + e.message); }
   }
 
   window.addEventListener('error', (e) => out('JavaScript error: ' + e.message));
