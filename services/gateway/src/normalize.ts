@@ -91,3 +91,75 @@ export function normalizeSubmission(body: unknown): NormalizedSubmission {
     warnings,
   };
 }
+
+// ---- Parts ---------------------------------------------------------------------------------------
+// Every top-level section of the body (info, outline, drafts, journey, ...) is kept as its own "part".
+// Sections can be missing, empty ({}), or have only a few fields; none of that is an error.
+
+export interface Part {
+  key: string;
+  data: unknown;
+  is_empty: boolean;
+}
+export interface PartScore {
+  part_key: string;
+  path: string;
+  criterion: string;
+  score: number;
+}
+
+const MAX_PARTS = 200;
+const MAX_SCORES = 500;
+const MAX_DEPTH = 6;
+const SCORE_CRITERIA = new Map(
+  ['TR', 'ME', 'LR', 'GRA', 'CC', 'score', 'totalScore', 'pct'].map((k) => [k.toLowerCase(), k]),
+);
+
+function isEmptyValue(v: unknown): boolean {
+  if (v === null || v === undefined || v === '') return true;
+  if (Array.isArray(v)) return v.length === 0;
+  if (typeof v === 'object') return Object.keys(v as object).length === 0;
+  return false;
+}
+
+export function splitParts(body: unknown): { parts: Part[]; warnings: string[] } {
+  const warnings: string[] = [];
+  if (body === null || body === undefined) return { parts: [], warnings };
+  if (typeof body !== 'object' || Array.isArray(body)) {
+    return { parts: [{ key: '_body', data: body, is_empty: isEmptyValue(body) }], warnings };
+  }
+  const parts: Part[] = [];
+  const meta: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(body as Record<string, unknown>)) {
+    if (value !== null && typeof value === 'object') {
+      if (parts.length >= MAX_PARTS) {
+        if (!warnings.includes('too_many_parts_truncated')) warnings.push('too_many_parts_truncated');
+        continue;
+      }
+      parts.push({ key: key.slice(0, 128), data: value, is_empty: isEmptyValue(value) });
+    } else {
+      meta[key] = value; // plain values (sheet name, flags, timestamps) go together in one part
+    }
+  }
+  if (Object.keys(meta).length > 0) parts.push({ key: '_meta', data: meta, is_empty: false });
+  return { parts, warnings };
+}
+
+/** Finds recognised numeric scores anywhere inside a part, remembering where each one was found. */
+export function extractScores(parts: Part[]): PartScore[] {
+  const out: PartScore[] = [];
+  const walk = (node: unknown, partKey: string, path: string[], depth: number) => {
+    if (out.length >= MAX_SCORES || depth > MAX_DEPTH || node === null || typeof node !== 'object') return;
+    for (const [k, v] of Object.entries(node as Record<string, unknown>)) {
+      const criterion = SCORE_CRITERIA.get(k.toLowerCase());
+      const n = criterion ? asNumber(v) : null;
+      if (criterion && n !== null) {
+        if (out.length < MAX_SCORES) out.push({ part_key: partKey, path: path.join('.'), criterion, score: n });
+      } else if (v !== null && typeof v === 'object') {
+        walk(v, partKey, [...path, k], depth + 1);
+      }
+    }
+  };
+  for (const p of parts) walk(p.data, p.key, [], 0);
+  return out;
+}

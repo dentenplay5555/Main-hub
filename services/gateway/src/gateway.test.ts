@@ -39,9 +39,9 @@ beforeEach(() => {
     if (dbMode === 'down') throw new TypeError('network down');
     if (dbMode === 'error500') return new Response('boom', { status: 500 });
     if (init?.method === 'POST') {
-      return Response.json(dbMode === 'duplicate' ? [] : [{ id: 'new-id' }], { status: 201 });
+      return Response.json(dbMode === 'duplicate' ? { id: 'original-id', duplicate: true } : { id: 'new-id', duplicate: false });
     }
-    return Response.json([{ id: 'original-id' }]);
+    return Response.json({});
   }) as typeof fetch;
 });
 
@@ -96,7 +96,8 @@ test('well-formed submission is stored with typed columns', async () => {
   const out = (await res.json()) as any;
   assert.equal(out.ok, true);
   assert.equal(out.id, 'new-id');
-  const sent = JSON.parse(String(calls[0].init?.body));
+  assert.ok(calls[0].url.endsWith('/rest/v1/rpc/ingest_submission'));
+  const sent = JSON.parse(String(calls[0].init?.body)).p;
   assert.equal(sent.user_id, USER_ID);
   assert.equal(sent.exercise_id, 'ex1');
   assert.equal(sent.score, 8);
@@ -108,7 +109,7 @@ test('not-JSON body, wrong content-type: still accepted, kept as text', async ()
   assert.equal(res.status, 201);
   const out = (await res.json()) as any;
   assert.ok(out.warnings.includes('body_not_json'));
-  assert.deepEqual(JSON.parse(String(calls[0].init?.body)).raw.body, { text: 'hello {{ not json' });
+  assert.deepEqual(JSON.parse(String(calls[0].init?.body)).p.raw.body, { text: 'hello {{ not json' });
 });
 
 test('weird shapes never error', async () => {
@@ -116,6 +117,36 @@ test('weird shapes never error', async () => {
     const res = await post(b);
     assert.equal(res.status, 201, `body ${b}`);
   }
+});
+
+const SAMPLE = {
+  sheet: 'Submissions',
+  info: { fname: 'Sample', lname: 'Student', klass: 'ม.3/1', no: '15', email: 'someone.else@student.nssc.ac.th', state: 'Beginner' },
+  outline: { out_T: 'x', out_C: 'y' },
+  drafts: {
+    d1: { text: 'a b c', feedback: 'f', TR: 5, CC: 4, LR: 3, GRA: 2, ME: 1 },
+    d2: { text: 'q', TR: '4', fbTotal: 2 },
+  },
+  journey: {},
+  mission: {},
+  part1Scores: {},
+  part1Final: { pct: 0, avatar: '' },
+  submittedAt: '2026-09-11T14:20:05.379Z',
+};
+
+test('multi-part exercise: every part stored, identity comes from the token, not the body', async () => {
+  const res = await post(JSON.stringify(SAMPLE), { 'Content-Type': 'text/plain;charset=utf-8' });
+  assert.equal(res.status, 201);
+  const sent = JSON.parse(String(calls[0].init?.body)).p;
+  assert.equal(sent.user_email, 'a.student@student.nssc.ac.th'); // not someone.else@... from the body
+  const keys = sent.parts.map((x: any) => x.key).sort();
+  assert.deepEqual(keys, ['_meta', 'drafts', 'info', 'journey', 'mission', 'outline', 'part1Final', 'part1Scores']);
+  const empty = sent.parts.filter((x: any) => x.is_empty).map((x: any) => x.key).sort();
+  assert.deepEqual(empty, ['journey', 'mission', 'part1Scores']);
+  const d1tr = sent.scores.find((x: any) => x.part_key === 'drafts' && x.path === 'd1' && x.criterion === 'TR');
+  assert.equal(d1tr.score, 5);
+  assert.equal(sent.scores.find((x: any) => x.path === 'd2' && x.criterion === 'TR').score, 4); // "4" -> 4
+  assert.equal(sent.client_ts, '2026-09-11T14:20:05.379Z');
 });
 
 test('oversized body -> 413 JSON, nothing stored', async () => {

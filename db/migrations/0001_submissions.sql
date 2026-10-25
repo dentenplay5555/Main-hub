@@ -1,3 +1,4 @@
+-- SUPERSEDED by 0003 on the "main" project (name clash with its existing public.submissions). Kept for reference.
 -- Submissions written by the gateway (services/gateway). Run in the Supabase SQL editor.
 -- The gateway keeps the original payload in `raw` and fills the typed columns when it can read them.
 

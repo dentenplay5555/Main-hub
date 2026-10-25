@@ -5,7 +5,7 @@ import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import { AuthError, verifyUser, type AuthUser } from './auth.ts';
 import { DbError, insertSubmission } from './db.ts';
 import type { Env } from './env.ts';
-import { normalizeSubmission } from './normalize.ts';
+import { extractScores, normalizeSubmission, splitParts } from './normalize.ts';
 
 type AppEnv = { Bindings: Env; Variables: { user: AuthUser } };
 
@@ -99,26 +99,28 @@ app.post('/v1/submissions', async (c) => {
   }
 
   const n = normalizeSubmission(payload);
+  const split = splitParts(payload);
+  const warningsAll = [...warnings, ...n.warnings, ...split.warnings];
   const idemRaw = c.req.header('Idempotency-Key')?.trim().slice(0, 128);
 
   const result = await insertSubmission(c.env, {
     user_id: user.id,
     user_email: user.email,
     exercise_id: n.exerciseId,
-    part: n.part,
     cycle: n.cycle,
     score: n.score,
     max_score: n.maxScore,
-    answers: n.answers,
     raw: { body: payload },
-    warnings: [...warnings, ...n.warnings],
+    warnings: warningsAll,
     client_ts: n.clientTs,
     idempotency_key: idemRaw || null,
     user_agent: c.req.header('User-Agent')?.slice(0, 256) ?? null,
+    parts: split.parts,
+    scores: extractScores(split.parts),
   });
 
   return c.json(
-    { ok: true, id: result.id, duplicate: result.duplicate, warnings: [...warnings, ...n.warnings] },
+    { ok: true, id: result.id, duplicate: result.duplicate, parts: split.parts.length, warnings: warningsAll },
     result.duplicate ? 200 : 201,
   );
 });
