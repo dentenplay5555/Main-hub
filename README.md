@@ -37,6 +37,9 @@ scripts/build.mjs build Hub + exam รวมเป็น dist/
 คะแนนเป็นข้อความ ฯลฯ ระบบเก็บ body ดิบไว้ใน `raw` ทุกครั้ง ดึงฟิลด์ที่อ่านออกไปใส่คอลัมน์ และบอกสิ่งที่ผิดปกติใน `warnings`
 (ดูกฎการอ่านฟิลด์ที่ `services/gateway/src/normalize.ts`) ส่ง `Idempotency-Key` ซ้ำได้ ระบบจะคืน id เดิมโดยไม่บันทึกซ้ำ
 
+**เก็บทุก part:** ทุกคีย์ระดับบนสุดของ body (เช่น `info`, `outline`, `drafts`, `journey`) ถูกแยกเก็บเป็นแถวใน `submission_parts` (ส่วนที่ว่าง `{}` ก็เก็บ โดยติด `is_empty`) ค่าธรรมดาอย่าง `sheet` รวมไว้ใน part `_meta` และคะแนนที่รู้จัก (TR/ME/LR/GRA/CC/score/pct) ในทุกระดับของ part ถูกดึงไปไว้ใน `part_scores`
+part ใหม่หรือ part ที่หายไปไม่ต้องแก้ schema ส่วนตัวตน (`user_id`, `user_email`) มาจาก token เสมอ ไม่เชื่อ `info.email` ใน body
+
 ทุก response เป็น JSON เสมอ ไม่มีหน้า HTML error หรือ stack trace
 
 ```bash
@@ -57,7 +60,7 @@ npm run dev         # รัน Hub
 
 ## Deploy gateway (Cloudflare)
 
-1. Supabase → SQL editor → รัน `db/migrations/0001_submissions.sql`
+1. Supabase → SQL editor → รัน `db/migrations/0003_raw_submissions_and_parts.sql` (0001 เลิกใช้แล้ว; โปรเจกต์ main ใช้ 0002 + 0003 ที่รันไปแล้ว)
 2. แก้ `services/gateway/wrangler.toml`: ใส่ `SUPABASE_URL` (และ `ALLOWED_EMAIL_DOMAINS` ถ้ารวมโดเมนครู)
 3. ตั้ง secret (ห้าม commit):
    ```bash

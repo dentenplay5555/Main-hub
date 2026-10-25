@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizeSubmission } from './normalize.ts';
+import { extractScores, normalizeSubmission, splitParts } from './normalize.ts';
 
 test('reads the usual fields', () => {
   const n = normalizeSubmission({ exerciseId: 'ex1', part: 2, cycle: 'c1', score: 7, maxScore: 10, answers: { q1: 'a' } });
@@ -43,4 +43,29 @@ test('any body shape is survivable', () => {
 test('score of NaN/Infinity is dropped', () => {
   assert.equal(normalizeSubmission({ score: Infinity }).score, null);
   assert.equal(normalizeSubmission({ score: NaN }).score, null);
+});
+
+test('splitParts: sparse, empty and odd bodies', () => {
+  assert.deepEqual(splitParts(null).parts, []);
+  assert.deepEqual(splitParts({}).parts, []);
+  assert.equal(splitParts({ only: { a: 1 } }).parts.length, 1);
+  assert.equal(splitParts({ a: {}, b: [] }).parts.every((p) => p.is_empty), true);
+  assert.deepEqual(splitParts([1, 2]).parts.map((p) => p.key), ['_body']);
+  assert.deepEqual(splitParts('hi').parts.map((p) => p.key), ['_body']);
+  const m = splitParts({ sheet: 'S', n: 3, p: { x: 1 } }).parts;
+  assert.deepEqual(m.map((p) => p.key).sort(), ['_meta', 'p']);
+});
+
+test('splitParts: caps the number of parts', () => {
+  const big: Record<string, unknown> = {};
+  for (let i = 0; i < 300; i++) big[`p${i}`] = { i };
+  const r = splitParts(big);
+  assert.equal(r.parts.length, 200);
+  assert.ok(r.warnings.includes('too_many_parts_truncated'));
+});
+
+test('extractScores: finds scores at any depth, ignores junk', () => {
+  const { parts } = splitParts({ d: { d1: { tr: 3, GRA: '4', LR: 'x', ME: null }, deep: { a: { b: { CC: 2 } } } } });
+  const s = extractScores(parts).map((x) => `${x.path}:${x.criterion}=${x.score}`).sort();
+  assert.deepEqual(s, ['d1:GRA=4', 'd1:TR=3', 'deep.a.b:CC=2']);
 });
