@@ -51,7 +51,7 @@ part ใหม่หรือ part ที่หายไปไม่ต้อง
 | `/v1/my/submissions`, `/v1/my/submissions/:id` | ทุกคน | งานของตัวเองเท่านั้น (กรองด้วย user id จาก token เสมอ) พร้อมทุก part และคะแนน |
 | `/v1/teacher/submissions`, `/:id`, `/v1/teacher/scores` | ครู (ไม่ใช่ครู = 403) | งานและคะแนนทั้งหมด กรองด้วย `exercise_id`, `email`, `limit` ได้ |
 
-ตั้งอีเมลครูเป็น secret (ไม่ลงไฟล์ใน repo เพราะ repo เป็น public): `cd services/gateway && npx wrangler secret put TEACHER_EMAILS` ใส่เป็นอีเมลเดียว หรือหลายอันคั่นด้วยจุลภาค มีผลทันที ไม่ต้อง deploy ใหม่
+ตั้งอีเมลครูนอก repo (repo เป็น public): ที่ Cloudflare Dashboard → Workers → dentenplay-gateway → Settings → Variables (`TEACHER_EMAILS`) หรือ `npx wrangler secret put TEACHER_EMAILS` ใส่อีเมลเดียวหรือหลายอันคั่นด้วยจุลภาค `wrangler.toml` ตั้ง `keep_vars = true` ไว้ จึงไม่ลบค่าที่ตั้งใน Dashboard ตอน deploy
 
 ทุก response เป็น JSON เสมอ ไม่มีหน้า HTML error หรือ stack trace
 

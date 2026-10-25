@@ -1,6 +1,8 @@
 name = "dentenplay-gateway"
 main = "src/index.ts"
 compatibility_date = "2025-09-01"
+# Keep variables set in the Cloudflare Dashboard (e.g. TEACHER_EMAILS) when deploying from here.
+keep_vars = true
 
 [vars]
 # Fill in your Supabase project URL, e.g. https://abcdxyz.supabase.co
@@ -13,6 +15,7 @@ ALLOWED_ORIGINS = ""
 MAX_BODY_BYTES = "262144"
 
 # Secrets (never commit):
-#   npx wrangler secret put TEACHER_EMAILS            # teacher email(s), comma-separated. Not listed = student.
+#   TEACHER_EMAILS (teacher email(s), comma-separated; not listed = student): set it in the Cloudflare Dashboard
+#   (Workers > dentenplay-gateway > Settings > Variables) or `npx wrangler secret put TEACHER_EMAILS`. Never in this file.
 #   npx wrangler secret put SUPABASE_SERVICE_ROLE_KEY
 #   npx wrangler secret put SUPABASE_JWT_SECRET      # only if your project still signs with the legacy HS256 secret
