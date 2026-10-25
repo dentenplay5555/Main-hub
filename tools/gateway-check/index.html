@@ -38,13 +38,17 @@
 
 <div class="row"><div>หรือวาง token เอง (ไม่ต้องล็อกอิน)</div><input id="manual" placeholder="eyJ..."></div>
 
-<pre id="out">ผลลัพธ์จะขึ้นที่นี่</pre>
+<pre id="out">ผลลัพธ์จะขึ้นที่นี่ (หน้านี้เวอร์ชัน 2)</pre>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script>
   // Both values are public by design (the publishable key only identifies the project).
   const SUPABASE_URL = 'https://uifwhdshcxhqzjhcgzeg.supabase.co';
   const PUBLISHABLE_KEY = 'sb_publishable__67CqM1dgMO0TQtg0SfD5A_DdbwA7Dl';
+  if (typeof supabase === 'undefined') {
+    document.getElementById('out').textContent = 'โหลด supabase-js จาก cdn.jsdelivr.net ไม่ได้ (เครือข่าย/ส่วนขยายบล็อก) หน้านี้จึงใช้ไม่ได้';
+    throw new Error('supabase-js not loaded');
+  }
   const sb = supabase.createClient(SUPABASE_URL, PUBLISHABLE_KEY);
   const $ = (id) => document.getElementById(id);
   const out = (x) => { $('out').textContent = typeof x === 'string' ? x : JSON.stringify(x, null, 2); };
@@ -53,7 +57,8 @@
   async function token() {
     const m = $('manual').value.trim();
     if (m) return m;
-    const { data } = await sb.auth.getSession();
+    const { data, error } = await sb.auth.getSession();
+    if (error) throw error;
     return data.session ? data.session.access_token : null;
   }
 
@@ -80,8 +85,10 @@
   };
 
   async function call(method, path, body) {
-    const t = await token();
-    if (!t) return out('ยังไม่มี token: ล็อกอินก่อน หรือวาง token');
+    out('กำลังเรียก ' + method + ' ' + path + ' ...');
+    let t;
+    try { t = await token(); } catch (e) { return out('อ่าน session ไม่ได้: ' + (e && e.message || e)); }
+    if (!t) return out('ยังไม่มี token: ล็อกอินก่อน (บรรทัดข้างปุ่มต้องขึ้นอีเมล) หรือวาง token เอง');
     const headers = { Authorization: 'Bearer ' + t };
     if (body !== undefined) { headers['Content-Type'] = 'application/json'; headers['Idempotency-Key'] = 'check-' + Date.now(); }
     try {
@@ -94,6 +101,8 @@
     } catch (e) { out('เรียกไม่สำเร็จ (เครือข่าย/CORS): ' + e.message); }
   }
 
+  window.addEventListener('error', (e) => out('JavaScript error: ' + e.message));
+  window.addEventListener('unhandledrejection', (e) => out('Error: ' + (e.reason && e.reason.message || e.reason)));
   document.querySelectorAll('[data-act]').forEach((b) => b.onclick = () => {
     const a = b.dataset.act;
     if (a === 'me') call('GET', '/v1/me');
