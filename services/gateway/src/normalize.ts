@@ -12,13 +12,13 @@ export interface NormalizedSubmission {
   warnings: string[];
 }
 
-const EXERCISE_KEYS = ['exerciseId', 'exercise_id', 'exId', 'ex', 'assignmentId', 'assignment_id', 'id'];
+const EXERCISE_KEYS = ['exerciseId', 'exercise_id', 'exId', 'ex', 'assignmentId', 'assignment_id', 'FormType', 'formType', 'id'];
 const PART_KEYS = ['part', 'partId', 'part_id', 'section'];
 const CYCLE_KEYS = ['cycle', 'round', 'phase'];
 const SCORE_KEYS = ['score', 'totalScore', 'total_score', 'points'];
 const MAX_KEYS = ['maxScore', 'max_score', 'total', 'fullScore'];
 const ANSWER_KEYS = ['answers', 'responses', 'data', 'result'];
-const TIME_KEYS = ['clientTs', 'timestamp', 'ts', 'submittedAt', 'submitted_at'];
+const TIME_KEYS = ['clientTs', 'timestamp', 'ts', 'submittedAt', 'submitted_at', 'FinishedAt', 'finishedAt'];
 
 function pick(obj: Record<string, unknown>, keys: string[]): unknown {
   for (const k of keys) {
@@ -130,6 +130,7 @@ export function splitParts(body: unknown): { parts: Part[]; warnings: string[] }
   }
   const parts: Part[] = [];
   const meta: Record<string, unknown> = {};
+  const flat: Record<string, Record<string, unknown>> = {};
   for (const [key, value] of Object.entries(body as Record<string, unknown>)) {
     if (value !== null && typeof value === 'object') {
       if (parts.length >= MAX_PARTS) {
@@ -138,8 +139,16 @@ export function splitParts(body: unknown): { parts: Part[]; warnings: string[] }
       }
       parts.push({ key: key.slice(0, 128), data: value, is_empty: isEmptyValue(value) });
     } else {
-      meta[key] = value; // plain values (sheet name, flags, timestamps) go together in one part
+      // Flat payloads ("Socratic_Topic", "Act1_Acc", ...): group by the text before the first "_",
+      // ignoring trailing digits, so Act1_Acc..Act6_Acc become one part "Act". Field names stay as sent.
+      const m = key.match(/^([A-Za-z][A-Za-z0-9]*?)\d*_.+/);
+      if (m) (flat[m[1]] ??= {})[key] = value;
+      else meta[key] = value; // everything else (sheet name, Name, Class, timestamps) goes together
     }
+  }
+  for (const [group, data] of Object.entries(flat)) {
+    if (parts.length >= MAX_PARTS) break;
+    parts.push({ key: group.slice(0, 128), data, is_empty: false });
   }
   if (Object.keys(meta).length > 0) parts.push({ key: '_meta', data: meta, is_empty: false });
   return { parts, warnings };
@@ -151,7 +160,7 @@ export function extractScores(parts: Part[]): PartScore[] {
   const walk = (node: unknown, partKey: string, path: string[], depth: number) => {
     if (out.length >= MAX_SCORES || depth > MAX_DEPTH || node === null || typeof node !== 'object') return;
     for (const [k, v] of Object.entries(node as Record<string, unknown>)) {
-      const criterion = SCORE_CRITERIA.get(k.toLowerCase());
+      const criterion = SCORE_CRITERIA.get(k.toLowerCase()) ?? (/(^|_)acc$|pct$/i.test(k) ? k : undefined);
       const n = criterion ? asNumber(v) : null;
       if (criterion && n !== null) {
         if (out.length < MAX_SCORES) out.push({ part_key: partKey, path: path.join('.'), criterion, score: n });

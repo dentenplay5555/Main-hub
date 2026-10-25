@@ -33,6 +33,7 @@ jobs:
           # Repo variables (Settings → Secrets and variables → Actions → Variables). Not secrets:
           # both end up readable in the built JS anyway. Leave unset until exam login works.
           INCLUDE_EXAM: ${{ vars.INCLUDE_EXAM }}
+          INCLUDE_LEARNING: ${{ vars.INCLUDE_LEARNING }}
           VITE_API_BASE: ${{ vars.VITE_API_BASE }}
         run: npm run build
       - uses: actions/upload-pages-artifact@v3

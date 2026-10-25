@@ -5,6 +5,7 @@ import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import { AuthError, verifyUser, type AuthUser } from './auth.ts';
 import { DbError, insertSubmission } from './db.ts';
 import type { Env } from './env.ts';
+import { registerReadRoutes } from './read.ts';
 import { extractScores, normalizeSubmission, splitParts } from './normalize.ts';
 
 type AppEnv = { Bindings: Env; Variables: { user: AuthUser } };
@@ -76,7 +77,9 @@ app.use('/v1/*', async (c, next) => {
 });
 
 // Lenient part: the body. Any shape, any content-type — it is stored, never rejected for its shape.
-app.post('/v1/submissions', async (c) => {
+// The exercise can come from the URL (/v1/submissions/writing-1 or /v1/submissions?exercise=writing-1),
+// so exercise webs don't have to put an id in their body. The URL wins over the body.
+app.post('/v1/submissions/:exercise?', async (c) => {
   const user = c.get('user');
 
   const body = await readBodyLimited(c.req.raw, maxBytes(c.env));
@@ -99,6 +102,12 @@ app.post('/v1/submissions', async (c) => {
   }
 
   const n = normalizeSubmission(payload);
+  const fromUrl = (c.req.param('exercise') ?? c.req.query('exercise') ?? '').trim().slice(0, 128);
+  if (fromUrl) {
+    n.exerciseId = fromUrl;
+    const i = n.warnings.indexOf('missing_exercise_id');
+    if (i >= 0) n.warnings.splice(i, 1);
+  }
   const split = splitParts(payload);
   const warningsAll = [...warnings, ...n.warnings, ...split.warnings];
   const idemRaw = c.req.header('Idempotency-Key')?.trim().slice(0, 128);
@@ -124,6 +133,8 @@ app.post('/v1/submissions', async (c) => {
     result.duplicate ? 200 : 201,
   );
 });
+
+registerReadRoutes(app);
 
 app.notFound((c) => c.json(errorBody('not_found', 'No such route.'), 404));
 

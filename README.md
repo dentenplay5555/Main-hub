@@ -15,6 +15,7 @@ Hub (apps/hub)    Exercise Web (แยก)    เว็บอื่น ๆ
 ```
 apps/hub          หน้าแรก + ตัวสลับแอป (Vite + React)   ← รายชื่อแอปแก้ที่ apps/hub/src/apps.ts
 apps/exam         Exam Management (React + Vite)         ← ยังใช้ API เดิมใน apps/exam/functions
+apps/learning     Learning System (React + Vite)         ← หน้านักเรียน/ครู อ่านผ่าน gateway (ดูหัวข้อ Learning System)
 services/gateway  Cloudflare Worker (Hono + jose)        ← ตัวใหม่ ดูหัวข้อด้านล่าง
 db/migrations     SQL สำหรับ Supabase                     ← รันใน SQL editor ตามลำดับเลข
 scripts/build.mjs build Hub + exam รวมเป็น dist/
@@ -37,8 +38,20 @@ scripts/build.mjs build Hub + exam รวมเป็น dist/
 คะแนนเป็นข้อความ ฯลฯ ระบบเก็บ body ดิบไว้ใน `raw` ทุกครั้ง ดึงฟิลด์ที่อ่านออกไปใส่คอลัมน์ และบอกสิ่งที่ผิดปกติใน `warnings`
 (ดูกฎการอ่านฟิลด์ที่ `services/gateway/src/normalize.ts`) ส่ง `Idempotency-Key` ซ้ำได้ ระบบจะคืน id เดิมโดยไม่บันทึกซ้ำ
 
-**เก็บทุก part:** ทุกคีย์ระดับบนสุดของ body (เช่น `info`, `outline`, `drafts`, `journey`) ถูกแยกเก็บเป็นแถวใน `submission_parts` (ส่วนที่ว่าง `{}` ก็เก็บ โดยติด `is_empty`) ค่าธรรมดาอย่าง `sheet` รวมไว้ใน part `_meta` และคะแนนที่รู้จัก (TR/ME/LR/GRA/CC/score/pct) ในทุกระดับของ part ถูกดึงไปไว้ใน `part_scores`
+**ระบุแบบฝึกจาก URL:** `POST /v1/submissions/writing-1` หรือ `POST /v1/submissions?exercise=writing-1` (ถ้ามีทั้งใน URL และ body จะใช้ค่าใน URL) เว็บแบบฝึกจึงไม่ต้องใส่ id ใน body
+
+**เก็บทุก part:** ทุกคีย์ระดับบนสุดของ body (เช่น `info`, `outline`, `drafts`, `journey`) ถูกแยกเก็บเป็นแถวใน `submission_parts` (ส่วนที่ว่าง `{}` ก็เก็บ โดยติด `is_empty`) ถ้า payload เป็นแบบแบน (เช่น `Socratic_Topic`, `Act1_Acc`) จะจัดกลุ่มตามคำก่อน `_` (ตัดเลขท้ายออก: `Act1_Acc`…`Act6_Acc` รวมเป็น part `Act`) ชื่อ field คงเดิม ค่าที่เหลือ (เช่น `sheet`, `Name`, `Class`) รวมไว้ใน part `_meta` และ `FormType` ใช้เป็นรหัสแบบฝึกถ้าไม่มีอย่างอื่น และคะแนนที่รู้จัก (TR/ME/LR/GRA/CC/score/pct) ในทุกระดับของ part ถูกดึงไปไว้ใน `part_scores`
 part ใหม่หรือ part ที่หายไปไม่ต้องแก้ schema ส่วนตัวตน (`user_id`, `user_email`) มาจาก token เสมอ ไม่เชื่อ `info.email` ใน body
+
+**อ่านผล (`GET`, ต้องมี Bearer token เหมือนกัน):**
+
+| endpoint | ใครใช้ได้ | ได้อะไร |
+|---|---|---|
+| `/v1/me` | ทุกคน | อีเมลและ role (`teacher` ถ้าอยู่ใน `TEACHER_EMAILS` ไม่งั้น `student`) |
+| `/v1/my/submissions`, `/v1/my/submissions/:id` | ทุกคน | งานของตัวเองเท่านั้น (กรองด้วย user id จาก token เสมอ) พร้อมทุก part และคะแนน |
+| `/v1/teacher/submissions`, `/:id`, `/v1/teacher/scores` | ครู (ไม่ใช่ครู = 403) | งานและคะแนนทั้งหมด กรองด้วย `exercise_id`, `email`, `limit` ได้ |
+
+ตั้งอีเมลครูใน `services/gateway/wrangler.toml` ที่ `TEACHER_EMAILS` (เมื่อ deploy)
 
 ทุก response เป็น JSON เสมอ ไม่มีหน้า HTML error หรือ stack trace
 
@@ -87,10 +100,18 @@ Workflow `.github/workflows/deploy-pages.yml` ทดสอบ (`npm test`) แ�
 
 แล้วรัน workflow ซ้ำ (Actions → Deploy to GitHub Pages → Run workflow) แอปใหม่ ๆ ให้เพิ่มทำตามรูปแบบเดียวกันนี้
 
+## Learning System (`apps/learning`)
+
+- นักเรียน: ล็อกอิน Google (Supabase Auth) → เห็นเรดาร์ 5 ทักษะ ระดับ (Beginner / Structure OK / Language Dev / Mastery) คะแนน x/9 สัญญาณเตือน (Lucky / Careless) ขั้นตอนต่อไป และเหรียญรางวัล
+- ครู (อีเมลใน `TEACHER_EMAILS`): ภาพรวมห้อง การกระจายคะแนน ตัวกรองห้อง/ระดับ/ธง ค้นหา และรายงานรายบุคคลแบบเดียวกับที่นักเรียนเห็น
+- กฎวินิจฉัยอยู่ที่ `apps/learning/src/lib/diagnose.ts` (มีเทสต์) ย้ายจากหน้า PRISM เดิมและ view ใน Supabase: ใช้คะแนน TR/ME/LR/GRA/CC ของกลุ่มล่าสุดที่ครบทั้ง 5 ด้าน (เช่น `drafts/d3`) ถ้าไม่ครบจะไม่เดาระดับ
+- ตั้งค่า (ไม่ลับทั้งหมด): `VITE_GATEWAY_URL`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_KEY` (publishable key), `VITE_EXERCISE_ID` (ว่าง = ทุกแบบฝึก)
+- เปิดบนเว็บ: repo Variable `INCLUDE_LEARNING=1` แล้วรัน workflow ซ้ำ และเพิ่ม URL ของเว็บ (เช่น `https://<user>.github.io/Main-hub/learning/`) ใน Supabase → Authentication → URL Configuration → Redirect URLs
+
 ## ยังไม่ได้ทำ (v0.1)
 
 - rate limit ต่อผู้ใช้ และกฎจำนวนครั้งที่ส่ง (Pretest 1, Cycle 1/2 รอบละ 3, Post Test 1) ที่ต้องบังคับฝั่ง gateway/DB
-- endpoint อ่านข้อมูล (ผลของฉัน, รายงานครู) และ role นักเรียน/ครู/ผู้ดูแล
+- รายงานครูแบบสรุป (กระจายคะแนน ระดับความรู้ flag รายห้อง) ซึ่งตอนนี้มีแค่ข้อมูลดิบจาก `/v1/teacher/scores`
 - ย้าย engine CbKST จาก `apps/exam/server/cbkst.ts` เข้า gateway
 - Learning System (รวม Dashboard), Weather, Music Player ยังเป็น "เร็ว ๆ นี้" ใน Hub
 - ตัวสลับแอปมีเฉพาะหน้า Hub ยังไม่ได้ฝังในแต่ละแอป

@@ -149,6 +149,43 @@ test('multi-part exercise: every part stored, identity comes from the token, not
   assert.equal(sent.client_ts, '2026-09-11T14:20:05.379Z');
 });
 
+test('exercise id from the URL (path or query) is stored and beats the body', async () => {
+  const mk = async (path: string, body: string) =>
+    app.request(path, { method: 'POST', body, headers: { Authorization: `Bearer ${await token()}` } }, ENV);
+  let res = await mk('/v1/submissions/writing-1', JSON.stringify({ drafts: {} }));
+  assert.equal(res.status, 201);
+  let sent = JSON.parse(String(calls[calls.length - 1].init?.body)).p;
+  assert.equal(sent.exercise_id, 'writing-1');
+  assert.ok(!sent.warnings.includes('missing_exercise_id'));
+  res = await mk('/v1/submissions?exercise=writing-2', JSON.stringify({ exerciseId: 'from-body' }));
+  sent = JSON.parse(String(calls[calls.length - 1].init?.body)).p;
+  assert.equal(sent.exercise_id, 'writing-2');
+  res = await mk('/v1/submissions', JSON.stringify({ drafts: {} }));
+  sent = JSON.parse(String(calls[calls.length - 1].init?.body)).p;
+  assert.equal(sent.exercise_id, null);
+  assert.ok(sent.warnings.includes('missing_exercise_id'));
+});
+
+test('flat payload (FormType/Name/Act1_Acc/...): grouped into parts, id and time read, body identity ignored', async () => {
+  const flat = {
+    FormType: 'Part1', Name: 'TEST STUDENT', Class: 'TEST', No: '999', Email: 'test@example.invalid',
+    CompletionPct: 100, AccuracyPct: 99, Act1_Acc: 1, Act2_Acc: 0.5,
+    SelfAssess_Vocab: 'a', SelfAssess_Task: 'b', Satisfaction_Fun: '5',
+    Socratic_Topic: 't', Socratic_View1: 'v', FinishedAt: '2026-10-25T08:00:00.000Z',
+  };
+  const res = await post(JSON.stringify(flat), { 'Content-Type': 'text/plain' });
+  assert.equal(res.status, 201);
+  const sent = JSON.parse(String(calls[calls.length - 1].init?.body)).p;
+  assert.equal(sent.user_email, 'a.student@student.nssc.ac.th');
+  assert.equal(sent.exercise_id, 'Part1');
+  assert.equal(sent.client_ts, '2026-10-25T08:00:00.000Z');
+  assert.deepEqual(sent.parts.map((x: any) => x.key).sort(), ['Act', 'Satisfaction', 'SelfAssess', 'Socratic', '_meta']);
+  const act = sent.parts.find((x: any) => x.key === 'Act').data;
+  assert.deepEqual(Object.keys(act).sort(), ['Act1_Acc', 'Act2_Acc']);
+  const crit = sent.scores.map((x: any) => `${x.part_key}:${x.criterion}=${x.score}`).sort();
+  assert.deepEqual(crit, ['Act:Act1_Acc=1', 'Act:Act2_Acc=0.5', '_meta:AccuracyPct=99', '_meta:CompletionPct=100']);
+});
+
 test('oversized body -> 413 JSON, nothing stored', async () => {
   const res = await post('x'.repeat(5000));
   assert.equal(res.status, 413);
