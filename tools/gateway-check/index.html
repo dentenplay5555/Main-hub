@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Gateway check</title>
+<style>
+  body{font:15px/1.5 system-ui,sans-serif;max-width:820px;margin:24px auto;padding:0 16px;background:#0f172a;color:#e2e8f0}
+  h1{font-size:20px} button{margin:4px 6px 4px 0;padding:8px 12px;border-radius:8px;border:0;background:#38bdf8;color:#04283a;font-weight:600;cursor:pointer}
+  button.alt{background:#334155;color:#e2e8f0} input{width:100%;padding:8px;border-radius:8px;border:1px solid #475569;background:#1e293b;color:#e2e8f0;box-sizing:border-box}
+  pre{background:#020617;padding:12px;border-radius:8px;overflow:auto;white-space:pre-wrap;word-break:break-word;min-height:120px}
+  .row{margin:12px 0} small{color:#94a3b8}
+</style>
+</head>
+<body>
+<h1>Gateway check</h1>
+<small>หน้าทดสอบ: ล็อกอินด้วย Google แล้วยิง gateway ด้วย token ของตัวเอง ไม่เก็บอะไรลงไฟล์ ใช้บน <code>http://localhost:5173</code> (ดู README ในโฟลเดอร์นี้)</small>
+
+<div class="row">
+  <div>Gateway URL</div>
+  <input id="gw" value="https://dentenplay-gateway.benten012555.workers.dev">
+</div>
+
+<div class="row">
+  <button id="login">เข้าสู่ระบบด้วย Google</button>
+  <button id="logout" class="alt">ออกจากระบบ</button>
+  <span id="who"><small>ยังไม่ได้ล็อกอิน</small></span>
+</div>
+
+<div class="row">
+  <button data-act="me">GET /v1/me</button>
+  <button data-act="post">POST ส่งงานตัวอย่าง (หลาย part)</button>
+  <button data-act="mine">GET /v1/my/submissions</button>
+  <button data-act="detail">GET งานล่าสุดแบบละเอียด</button>
+  <button data-act="tlist" class="alt">GET /v1/teacher/submissions</button>
+  <button data-act="tscores" class="alt">GET /v1/teacher/scores</button>
+</div>
+
+<div class="row"><div>หรือวาง token เอง (ไม่ต้องล็อกอิน)</div><input id="manual" placeholder="eyJ..."></div>
+
+<pre id="out">ผลลัพธ์จะขึ้นที่นี่</pre>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script>
+  // Both values are public by design (the publishable key only identifies the project).
+  const SUPABASE_URL = 'https://uifwhdshcxhqzjhcgzeg.supabase.co';
+  const PUBLISHABLE_KEY = 'sb_publishable__67CqM1dgMO0TQtg0SfD5A_DdbwA7Dl';
+  const sb = supabase.createClient(SUPABASE_URL, PUBLISHABLE_KEY);
+  const $ = (id) => document.getElementById(id);
+  const out = (x) => { $('out').textContent = typeof x === 'string' ? x : JSON.stringify(x, null, 2); };
+  let lastId = null;
+
+  async function token() {
+    const m = $('manual').value.trim();
+    if (m) return m;
+    const { data } = await sb.auth.getSession();
+    return data.session ? data.session.access_token : null;
+  }
+
+  async function refreshWho() {
+    const { data } = await sb.auth.getSession();
+    $('who').textContent = data.session ? data.session.user.email : 'ยังไม่ได้ล็อกอิน';
+  }
+
+  $('login').onclick = () => sb.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: location.origin + location.pathname } });
+  $('logout').onclick = async () => { await sb.auth.signOut(); refreshWho(); out('ออกจากระบบแล้ว'); };
+  sb.auth.onAuthStateChange(refreshWho);
+  refreshWho();
+
+  const SAMPLE = {
+    sheet: 'Submissions',
+    info: { fname: 'ทดสอบ', lname: 'ระบบ', klass: 'ม.3/1', no: '1', state: 'Beginner', savedAt: new Date().toISOString() },
+    outline: { out_T: 'test', out_C: 'ok' },
+    drafts: {
+      d1: { text: 'draft one', feedback: 'fb', TR: 3, CC: 4, LR: 3, GRA: 2, ME: 4 },
+      d2: { text: 'draft two', TR: 4, CC: 4, LR: 4, GRA: 3, ME: 4, fbTotal: 2, fbFixed: 2 },
+    },
+    journey: {}, mission: {}, part1Scores: {}, part1Final: { pct: 0 },
+    submittedAt: new Date().toISOString(),
+  };
+
+  async function call(method, path, body) {
+    const t = await token();
+    if (!t) return out('ยังไม่มี token: ล็อกอินก่อน หรือวาง token');
+    const headers = { Authorization: 'Bearer ' + t };
+    if (body !== undefined) { headers['Content-Type'] = 'application/json'; headers['Idempotency-Key'] = 'check-' + Date.now(); }
+    try {
+      const res = await fetch($('gw').value.replace(/\/$/, '') + path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
+      const text = await res.text();
+      let json; try { json = JSON.parse(text); } catch { json = text; }
+      if (json && json.id) lastId = json.id;
+      if (json && json.items && json.items[0] && json.items[0].id) lastId = json.items[0].id;
+      out({ status: res.status, body: json });
+    } catch (e) { out('เรียกไม่สำเร็จ (เครือข่าย/CORS): ' + e.message); }
+  }
+
+  document.querySelectorAll('[data-act]').forEach((b) => b.onclick = () => {
+    const a = b.dataset.act;
+    if (a === 'me') call('GET', '/v1/me');
+    if (a === 'post') call('POST', '/v1/submissions', SAMPLE);
+    if (a === 'mine') call('GET', '/v1/my/submissions?limit=5');
+    if (a === 'detail') lastId ? call('GET', '/v1/my/submissions/' + lastId) : out('ยังไม่มี id: กดส่งงานตัวอย่างหรือ GET /v1/my/submissions ก่อน');
+    if (a === 'tlist') call('GET', '/v1/teacher/submissions?limit=5');
+    if (a === 'tscores') call('GET', '/v1/teacher/scores?limit=20');
+  });
+</script>
+</body>
+</html>
