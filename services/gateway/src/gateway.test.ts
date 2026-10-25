@@ -149,6 +149,23 @@ test('multi-part exercise: every part stored, identity comes from the token, not
   assert.equal(sent.client_ts, '2026-09-11T14:20:05.379Z');
 });
 
+test('exercise id from the URL (path or query) is stored and beats the body', async () => {
+  const mk = async (path: string, body: string) =>
+    app.request(path, { method: 'POST', body, headers: { Authorization: `Bearer ${await token()}` } }, ENV);
+  let res = await mk('/v1/submissions/writing-1', JSON.stringify({ drafts: {} }));
+  assert.equal(res.status, 201);
+  let sent = JSON.parse(String(calls[calls.length - 1].init?.body)).p;
+  assert.equal(sent.exercise_id, 'writing-1');
+  assert.ok(!sent.warnings.includes('missing_exercise_id'));
+  res = await mk('/v1/submissions?exercise=writing-2', JSON.stringify({ exerciseId: 'from-body' }));
+  sent = JSON.parse(String(calls[calls.length - 1].init?.body)).p;
+  assert.equal(sent.exercise_id, 'writing-2');
+  res = await mk('/v1/submissions', JSON.stringify({ drafts: {} }));
+  sent = JSON.parse(String(calls[calls.length - 1].init?.body)).p;
+  assert.equal(sent.exercise_id, null);
+  assert.ok(sent.warnings.includes('missing_exercise_id'));
+});
+
 test('oversized body -> 413 JSON, nothing stored', async () => {
   const res = await post('x'.repeat(5000));
   assert.equal(res.status, 413);

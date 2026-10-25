@@ -37,6 +37,8 @@ scripts/build.mjs build Hub + exam รวมเป็น dist/
 คะแนนเป็นข้อความ ฯลฯ ระบบเก็บ body ดิบไว้ใน `raw` ทุกครั้ง ดึงฟิลด์ที่อ่านออกไปใส่คอลัมน์ และบอกสิ่งที่ผิดปกติใน `warnings`
 (ดูกฎการอ่านฟิลด์ที่ `services/gateway/src/normalize.ts`) ส่ง `Idempotency-Key` ซ้ำได้ ระบบจะคืน id เดิมโดยไม่บันทึกซ้ำ
 
+**ระบุแบบฝึกจาก URL:** `POST /v1/submissions/writing-1` หรือ `POST /v1/submissions?exercise=writing-1` (ถ้ามีทั้งใน URL และ body จะใช้ค่าใน URL) เว็บแบบฝึกจึงไม่ต้องใส่ id ใน body
+
 **เก็บทุก part:** ทุกคีย์ระดับบนสุดของ body (เช่น `info`, `outline`, `drafts`, `journey`) ถูกแยกเก็บเป็นแถวใน `submission_parts` (ส่วนที่ว่าง `{}` ก็เก็บ โดยติด `is_empty`) ค่าธรรมดาอย่าง `sheet` รวมไว้ใน part `_meta` และคะแนนที่รู้จัก (TR/ME/LR/GRA/CC/score/pct) ในทุกระดับของ part ถูกดึงไปไว้ใน `part_scores`
 part ใหม่หรือ part ที่หายไปไม่ต้องแก้ schema ส่วนตัวตน (`user_id`, `user_email`) มาจาก token เสมอ ไม่เชื่อ `info.email` ใน body
 
