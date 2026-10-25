@@ -40,6 +40,16 @@ scripts/build.mjs build Hub + exam รวมเป็น dist/
 **เก็บทุก part:** ทุกคีย์ระดับบนสุดของ body (เช่น `info`, `outline`, `drafts`, `journey`) ถูกแยกเก็บเป็นแถวใน `submission_parts` (ส่วนที่ว่าง `{}` ก็เก็บ โดยติด `is_empty`) ค่าธรรมดาอย่าง `sheet` รวมไว้ใน part `_meta` และคะแนนที่รู้จัก (TR/ME/LR/GRA/CC/score/pct) ในทุกระดับของ part ถูกดึงไปไว้ใน `part_scores`
 part ใหม่หรือ part ที่หายไปไม่ต้องแก้ schema ส่วนตัวตน (`user_id`, `user_email`) มาจาก token เสมอ ไม่เชื่อ `info.email` ใน body
 
+**อ่านผล (`GET`, ต้องมี Bearer token เหมือนกัน):**
+
+| endpoint | ใครใช้ได้ | ได้อะไร |
+|---|---|---|
+| `/v1/me` | ทุกคน | อีเมลและ role (`teacher` ถ้าอยู่ใน `TEACHER_EMAILS` ไม่งั้น `student`) |
+| `/v1/my/submissions`, `/v1/my/submissions/:id` | ทุกคน | งานของตัวเองเท่านั้น (กรองด้วย user id จาก token เสมอ) พร้อมทุก part และคะแนน |
+| `/v1/teacher/submissions`, `/:id`, `/v1/teacher/scores` | ครู (ไม่ใช่ครู = 403) | งานและคะแนนทั้งหมด กรองด้วย `exercise_id`, `email`, `limit` ได้ |
+
+ตั้งอีเมลครูใน `services/gateway/wrangler.toml` ที่ `TEACHER_EMAILS` (เมื่อ deploy)
+
 ทุก response เป็น JSON เสมอ ไม่มีหน้า HTML error หรือ stack trace
 
 ```bash
@@ -90,7 +100,7 @@ Workflow `.github/workflows/deploy-pages.yml` ทดสอบ (`npm test`) แ�
 ## ยังไม่ได้ทำ (v0.1)
 
 - rate limit ต่อผู้ใช้ และกฎจำนวนครั้งที่ส่ง (Pretest 1, Cycle 1/2 รอบละ 3, Post Test 1) ที่ต้องบังคับฝั่ง gateway/DB
-- endpoint อ่านข้อมูล (ผลของฉัน, รายงานครู) และ role นักเรียน/ครู/ผู้ดูแล
+- รายงานครูแบบสรุป (กระจายคะแนน ระดับความรู้ flag รายห้อง) ซึ่งตอนนี้มีแค่ข้อมูลดิบจาก `/v1/teacher/scores`
 - ย้าย engine CbKST จาก `apps/exam/server/cbkst.ts` เข้า gateway
 - Learning System (รวม Dashboard), Weather, Music Player ยังเป็น "เร็ว ๆ นี้" ใน Hub
 - ตัวสลับแอปมีเฉพาะหน้า Hub ยังไม่ได้ฝังในแต่ละแอป

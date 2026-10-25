@@ -7,6 +7,8 @@ compatibility_date = "2025-09-01"
 SUPABASE_URL = "https://uifwhdshcxhqzjhcgzeg.supabase.co"
 # Comma-separated. A user whose Google email is outside these domains gets 403.
 ALLOWED_EMAIL_DOMAINS = "student.nssc.ac.th,nssc.ac.th"
+# The teacher's school email (comma-separate if more than one). Everyone else is a student.
+TEACHER_EMAILS = ""
 # Comma-separated origins allowed by CORS. Empty = any origin (safe here: auth is a Bearer token, no cookies).
 ALLOWED_ORIGINS = ""
 # Body size guard (bytes). Anything larger gets 413.

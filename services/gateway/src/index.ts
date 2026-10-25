@@ -5,6 +5,7 @@ import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import { AuthError, verifyUser, type AuthUser } from './auth.ts';
 import { DbError, insertSubmission } from './db.ts';
 import type { Env } from './env.ts';
+import { registerReadRoutes } from './read.ts';
 import { extractScores, normalizeSubmission, splitParts } from './normalize.ts';
 
 type AppEnv = { Bindings: Env; Variables: { user: AuthUser } };
@@ -124,6 +125,8 @@ app.post('/v1/submissions', async (c) => {
     result.duplicate ? 200 : 201,
   );
 });
+
+registerReadRoutes(app);
 
 app.notFound((c) => c.json(errorBody('not_found', 'No such route.'), 404));
 

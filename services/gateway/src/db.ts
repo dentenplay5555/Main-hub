@@ -55,3 +55,18 @@ export async function insertSubmission(
   const out = (await res.json().catch(() => null)) as { id?: string | null; duplicate?: boolean } | null;
   return { id: out?.id ?? null, duplicate: out?.duplicate === true };
 }
+
+/** Read rows through Supabase's REST API with the service-role key. `query` is a PostgREST query string. */
+export async function selectRows<T = Record<string, unknown>>(env: Env, table: string, query: string): Promise<T[]> {
+  if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) throw new DbError('gateway database is not configured');
+  const base = env.SUPABASE_URL.replace(/\/$/, '');
+  let res: Response;
+  try {
+    res = await fetch(`${base}/rest/v1/${table}?${query}`, { headers: headers(env) });
+  } catch {
+    throw new DbError('database unreachable');
+  }
+  if (!res.ok) throw new DbError(`database read failed (${res.status})`, res.status);
+  const rows = (await res.json().catch(() => [])) as unknown;
+  return Array.isArray(rows) ? (rows as T[]) : [];
+}
