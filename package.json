@@ -5,12 +5,13 @@
   "workspaces": [
     "apps/hub",
     "apps/exam",
+    "apps/learning",
     "services/gateway"
   ],
   "scripts": {
     "dev": "npm run dev -w apps/hub",
     "build": "node scripts/build.mjs",
-    "typecheck": "npm run typecheck -w apps/exam && npm run typecheck -w apps/hub && npm run typecheck -w services/gateway",
-    "test": "npm test -w apps/exam && npm test -w services/gateway"
+    "typecheck": "npm run typecheck -w apps/exam && npm run typecheck -w apps/hub && npm run typecheck -w apps/learning && npm run typecheck -w services/gateway",
+    "test": "npm test -w apps/exam && npm test -w apps/learning && npm test -w services/gateway"
   }
 }

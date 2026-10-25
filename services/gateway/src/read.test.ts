@@ -2,6 +2,7 @@ import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { SignJWT } from 'jose';
 import app from './index.ts';
+import { profileFrom } from './read.ts';
 import type { Env } from './env.ts';
 
 const SECRET = 'test-secret-test-secret-test-secret-123456';
@@ -93,6 +94,31 @@ test('filter values cannot smuggle extra PostgREST filters', async () => {
 test('limit is clamped', async () => {
   await get('/v1/my/submissions?limit=999999', 'a.student@student.nssc.ac.th', STUDENT);
   assert.ok(urls[0].endsWith('limit=200'));
+});
+
+test('profileFrom reads nested info and flat _meta payloads, tolerates junk', () => {
+  assert.deepEqual(profileFrom([{ part_key: 'info', data: { fname: 'A', lname: 'B', klass: 'ม.3/1', no: '15' } }]), { name: 'A B', klass: 'ม.3/1', no: '15' });
+  assert.deepEqual(profileFrom([{ part_key: '_meta', data: { Name: 'X Y', Class: 'ม.3/2', No: 7 } }]), { name: 'X Y', klass: 'ม.3/2', no: '7' });
+  assert.deepEqual(profileFrom([]), { name: null, klass: null, no: null });
+  assert.deepEqual(profileFrom([{ part_key: 'info', data: 'junk' }, { part_key: '_meta', data: [1] }]), { name: null, klass: null, no: null });
+});
+
+test('teacher overview: 403 for students; one newest row per student for the teacher', async () => {
+  const denied = await get('/v1/teacher/overview', 'a.student@student.nssc.ac.th', STUDENT);
+  assert.equal(denied.status, 403);
+  globalThis.fetch = (async (u: string | URL | Request) => {
+    urls.push(String(u));
+    return Response.json([
+      { id: 'n', user_email: 'S1@student.nssc.ac.th', exercise_id: 'e', created_at: '2026-10-25', submission_parts: [{ part_key: 'info', data: { fname: 'A', lname: 'B', klass: 'ม.3/1', no: '1' } }], part_scores: [{ part_key: 'drafts', path: 'd1', criterion: 'TR', score: 4 }] },
+      { id: 'o', user_email: 's1@student.nssc.ac.th', exercise_id: 'e', created_at: '2026-10-24', submission_parts: [], part_scores: [] },
+      { id: 'x', user_email: 's2@student.nssc.ac.th', exercise_id: 'e', created_at: '2026-10-23', submission_parts: [], part_scores: [] },
+    ]);
+  }) as typeof fetch;
+  const res = (await (await get('/v1/teacher/overview?exercise_id=e', 'teacher@nssc.ac.th', TEACHER)).json()) as any;
+  assert.deepEqual(res.items.map((i: any) => i.id), ['n', 'x']);
+  assert.equal(res.items[0].profile.name, 'A B');
+  assert.equal(res.items[0].scores[0].score, 4);
+  assert.ok(urls[urls.length - 1].includes('exercise_id=eq.e'));
 });
 
 test.after(() => {

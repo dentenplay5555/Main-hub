@@ -46,6 +46,34 @@ async function detail(env: Env, id: string, ownerId?: string) {
   return { ...sub, parts, scores };
 }
 
+type PartRow = { part_key: string; data: unknown };
+
+const str = (v: unknown): string | null => (typeof v === 'string' || typeof v === 'number') && String(v).trim() ? String(v).trim().slice(0, 128) : null;
+const field = (o: Record<string, unknown>, ...keys: string[]) => {
+  for (const k of keys) {
+    const v = str(o[k]);
+    if (v) return v;
+  }
+  return null;
+};
+
+/** Name / class / number as the exercise web reported them (nested "info" part, or the flat "_meta" part). */
+export function profileFrom(parts: PartRow[]): { name: string | null; klass: string | null; no: string | null } {
+  const obj = (key: string) => {
+    const d = parts.find((p) => p.part_key === key)?.data;
+    return d && typeof d === 'object' && !Array.isArray(d) ? (d as Record<string, unknown>) : {};
+  };
+  const info = obj('info');
+  const meta = obj('_meta');
+  const first = field(info, 'fname', 'firstName');
+  const last = field(info, 'lname', 'lastName');
+  return {
+    name: [first, last].filter(Boolean).join(' ') || field(info, 'name', 'Name') || field(meta, 'Name', 'name'),
+    klass: field(info, 'klass', 'class', 'Class') ?? field(meta, 'Class', 'klass', 'class'),
+    no: field(info, 'no', 'No') ?? field(meta, 'No', 'no'),
+  };
+}
+
 export function registerReadRoutes(app: Hono<{ Bindings: Env; Variables: { user: AuthUser } }>) {
   app.get('/v1/me', (c) => {
     const user = c.get('user');
@@ -100,5 +128,40 @@ export function registerReadRoutes(app: Hono<{ Bindings: Env; Variables: { user:
       `select=part_key,path,criterion,score,raw_submissions!inner(id,user_email,exercise_id,created_at)${ex ? `&raw_submissions.exercise_id=eq.${ex}` : ''}&order=id.desc&limit=${limitOf(c, 2000, 5000)}`,
     );
     return c.json({ ok: true, items: rows });
+  });
+
+  // One row per student: their newest submission with the name/class/number they reported and all scores.
+  // The raw material for the room report (the dashboard computes levels/flags from these scores).
+  app.get('/v1/teacher/overview', async (c) => {
+    requireTeacher(c);
+    const ex = safe(c.req.query('exercise_id'));
+    const rows = await selectRows<{
+      id: string;
+      user_email: string;
+      exercise_id: string | null;
+      created_at: string;
+      submission_parts: PartRow[];
+      part_scores: Array<{ part_key: string; path: string; criterion: string; score: number }>;
+    }>(
+      c.env,
+      'raw_submissions',
+      `select=id,user_email,exercise_id,created_at,submission_parts(part_key,data),part_scores(part_key,path,criterion,score)&submission_parts.part_key=in.(info,_meta)${ex ? `&exercise_id=eq.${ex}` : ''}&order=created_at.desc&limit=${limitOf(c, 1000, 2000)}`,
+    );
+    const seen = new Set<string>();
+    const items = [];
+    for (const r of rows) {
+      const key = r.user_email.toLowerCase();
+      if (seen.has(key)) continue; // newest first, so the first one wins
+      seen.add(key);
+      items.push({
+        id: r.id,
+        user_email: r.user_email,
+        exercise_id: r.exercise_id,
+        created_at: r.created_at,
+        profile: profileFrom(r.submission_parts ?? []),
+        scores: r.part_scores ?? [],
+      });
+    }
+    return c.json({ ok: true, items });
   });
 }

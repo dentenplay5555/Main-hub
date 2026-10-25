@@ -15,6 +15,7 @@ Hub (apps/hub)    Exercise Web (แยก)    เว็บอื่น ๆ
 ```
 apps/hub          หน้าแรก + ตัวสลับแอป (Vite + React)   ← รายชื่อแอปแก้ที่ apps/hub/src/apps.ts
 apps/exam         Exam Management (React + Vite)         ← ยังใช้ API เดิมใน apps/exam/functions
+apps/learning     Learning System (React + Vite)         ← หน้านักเรียน/ครู อ่านผ่าน gateway (ดูหัวข้อ Learning System)
 services/gateway  Cloudflare Worker (Hono + jose)        ← ตัวใหม่ ดูหัวข้อด้านล่าง
 db/migrations     SQL สำหรับ Supabase                     ← รันใน SQL editor ตามลำดับเลข
 scripts/build.mjs build Hub + exam รวมเป็น dist/
@@ -98,6 +99,14 @@ Workflow `.github/workflows/deploy-pages.yml` ทดสอบ (`npm test`) แ�
 - `VITE_API_BASE` = origin ของ API ที่ exam จะเรียก (ว่างไว้ได้ถ้ายังไม่มี)
 
 แล้วรัน workflow ซ้ำ (Actions → Deploy to GitHub Pages → Run workflow) แอปใหม่ ๆ ให้เพิ่มทำตามรูปแบบเดียวกันนี้
+
+## Learning System (`apps/learning`)
+
+- นักเรียน: ล็อกอิน Google (Supabase Auth) → เห็นเรดาร์ 5 ทักษะ ระดับ (Beginner / Structure OK / Language Dev / Mastery) คะแนน x/9 สัญญาณเตือน (Lucky / Careless) ขั้นตอนต่อไป และเหรียญรางวัล
+- ครู (อีเมลใน `TEACHER_EMAILS`): ภาพรวมห้อง การกระจายคะแนน ตัวกรองห้อง/ระดับ/ธง ค้นหา และรายงานรายบุคคลแบบเดียวกับที่นักเรียนเห็น
+- กฎวินิจฉัยอยู่ที่ `apps/learning/src/lib/diagnose.ts` (มีเทสต์) ย้ายจากหน้า PRISM เดิมและ view ใน Supabase: ใช้คะแนน TR/ME/LR/GRA/CC ของกลุ่มล่าสุดที่ครบทั้ง 5 ด้าน (เช่น `drafts/d3`) ถ้าไม่ครบจะไม่เดาระดับ
+- ตั้งค่า (ไม่ลับทั้งหมด): `VITE_GATEWAY_URL`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_KEY` (publishable key), `VITE_EXERCISE_ID` (ว่าง = ทุกแบบฝึก)
+- เปิดบนเว็บ: repo Variable `INCLUDE_LEARNING=1` แล้วรัน workflow ซ้ำ และเพิ่ม URL ของเว็บ (เช่น `https://<user>.github.io/Main-hub/learning/`) ใน Supabase → Authentication → URL Configuration → Redirect URLs
 
 ## ยังไม่ได้ทำ (v0.1)
 
