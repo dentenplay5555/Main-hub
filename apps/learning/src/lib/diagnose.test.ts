@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { badgesFor, binaryTotal, diagnose, flagOf, knowledgeState, pickRubric, stepsFor, type ScoreRow } from './diagnose.ts';
+import { diagnoseScores, levelMismatch, badgesFor, binaryTotal, diagnose, flagOf, knowledgeState, pickRubric, stepsFor, type ScoreRow } from './diagnose.ts';
 
 const row = (path: string, criterion: string, score: number, part_key = 'drafts'): ScoreRow => ({ part_key, path, criterion, score });
 const full = (path: string, v: Record<string, number>, part_key = 'drafts') =>
@@ -48,4 +48,14 @@ test('steps and badges', () => {
   const b = badgesFor({ TR: 3, ME: 3, LR: 1, GRA: 1, CC: 2 });
   assert.deepEqual(b.filter((x) => x.earned).map((x) => x.name), ['First Draft Hero', 'Target Sniper']);
   assert.equal(b.filter((x) => x.future).length, 2);
+});
+
+test('diagnoseScores works on gateway-style rows; levelMismatch flags only real disagreements', () => {
+  const d = diagnoseScores([{ criterion: 'TR', score: 1 }, { criterion: 'ME', score: 1 }, { criterion: 'LR', score: 1 }, { criterion: 'GRA', score: 1 }, { criterion: 'CC', score: 1 }])!;
+  assert.equal(d.ks, 'Beginner');
+  assert.equal(levelMismatch(d, 'Mastery'), true);
+  assert.equal(levelMismatch(d, 'beginner'), false);
+  assert.equal(levelMismatch(d, null), false);
+  assert.equal(levelMismatch(null, 'Mastery'), false);
+  assert.equal(diagnoseScores([{ criterion: 'TR', score: 5 }]), null);
 });

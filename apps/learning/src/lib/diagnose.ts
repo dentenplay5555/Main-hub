@@ -173,3 +173,13 @@ export function badgesFor(r: Rubric): Badge[] {
     { icon: '🧘', name: 'Calm Mind', desc: 'ความกังวล SLWAI ลดลง', earned: false, future: true },
   ];
 }
+
+/** Scores as the gateway returns them for a real assessment ({criterion, score}); same rules as diagnose(). */
+export function diagnoseScores(scores: Array<{ criterion: string; score: number }>): Diagnosis | null {
+  return diagnose(scores.map((x) => ({ part_key: 'assessment', path: '', criterion: x.criterion, score: x.score })));
+}
+
+/** True when the level recorded by the old PRISM import disagrees with the level the five scores give. */
+export function levelMismatch(d: Diagnosis | null, importedLevel: string | null | undefined): boolean {
+  return !!d && !!importedLevel && importedLevel.trim().toLowerCase() !== d.ks.toLowerCase();
+}

@@ -2,7 +2,7 @@ import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { SignJWT } from 'jose';
 import app from './index.ts';
-import { profileFrom } from './read.ts';
+import { toAssessment } from './read.ts';
 import type { Env } from './env.ts';
 
 const SECRET = 'test-secret-test-secret-test-secret-123456';
@@ -96,40 +96,68 @@ test('limit is clamped', async () => {
   assert.ok(urls[0].endsWith('limit=200'));
 });
 
-test('profileFrom reads nested info and flat _meta payloads, tolerates junk', () => {
-  assert.deepEqual(profileFrom([{ part_key: 'info', data: { fname: 'A', lname: 'B', klass: 'ม.3/1', no: '15' } }]), { name: 'A B', klass: 'ม.3/1', no: '15' });
-  assert.deepEqual(profileFrom([{ part_key: '_meta', data: { Name: 'X Y', Class: 'ม.3/2', No: 7 } }]), { name: 'X Y', klass: 'ม.3/2', no: '7' });
-  assert.deepEqual(profileFrom([]), { name: null, klass: null, no: null });
-  assert.deepEqual(profileFrom([{ part_key: 'info', data: 'junk' }, { part_key: '_meta', data: [1] }]), { name: null, klass: null, no: null });
+test('toAssessment maps criterion codes, tolerates object/array embeds and junk rows', () => {
+  const a = toAssessment({
+    id: 'a1', created_at: 't', mastery_level: 'Mastery', guess_tag: null,
+    writing_assessment_scores: [
+      { score: '4', rubric_criteria: { code: 'TR' } },
+      { score: 3, rubric_criteria: [{ code: 'CC' }] },
+      { score: 'x', rubric_criteria: { code: 'LR' } },
+      { score: 2, rubric_criteria: null },
+    ],
+  })!;
+  assert.deepEqual(a.scores, [{ criterion: 'TR', score: 4 }, { criterion: 'CC', score: 3 }]);
+  assert.deepEqual(a.imported, { level: 'Mastery', flag: null });
+  assert.equal(toAssessment(undefined), null);
 });
 
-test('teacher overview: 403 for students; roster names win; missing = roster students without a submission', async () => {
-  const denied = await get('/v1/teacher/overview', 'a.student@student.nssc.ac.th', STUDENT);
-  assert.equal(denied.status, 403);
+test('/v1/my/assessment: matched by the token email; not in roster -> in_roster false, no read of scores', async () => {
+  globalThis.fetch = (async (u: string | URL | Request) => {
+    const s = String(u);
+    urls.push(s);
+    if (s.includes('/student_emails?')) return Response.json(s.includes('known%40') ? [{ student_id: 'st1', students: { class: 'ม.3/1', class_number: 4, full_name: 'ชื่อ จริง' } }] : []);
+    return Response.json([{ id: 'w1', created_at: 't', mastery_level: 'Beginner', guess_tag: 'OK', writing_assessment_scores: [{ score: 2, rubric_criteria: { code: 'TR' } }] }]);
+  }) as typeof fetch;
+  const ok = (await (await get('/v1/my/assessment', 'Known@student.nssc.ac.th', STUDENT)).json()) as any;
+  assert.equal(ok.in_roster, true);
+  assert.deepEqual(ok.profile, { name: 'ชื่อ จริง', klass: 'ม.3/1', no: '4' });
+  assert.equal(ok.assessment.scores[0].criterion, 'TR');
+  assert.ok(urls.some((x) => x.includes('student_id=eq.st1')));
+  urls = [];
+  const no = (await (await get('/v1/my/assessment', 'other@student.nssc.ac.th', STUDENT)).json()) as any;
+  assert.equal(no.in_roster, false);
+  assert.equal(no.assessment, null);
+  assert.ok(!urls.some((x) => x.includes('writing_assessments')));
+});
+
+test('/v1/teacher/students: 403 for students; assessments and submission status stay independent', async () => {
+  assert.equal((await get('/v1/teacher/students', 'a.student@student.nssc.ac.th', STUDENT)).status, 403);
   globalThis.fetch = (async (u: string | URL | Request) => {
     const s = String(u);
     urls.push(s);
     if (s.includes('/rest/v1/students?')) {
       return Response.json([
-        { class: 'ม.3/1', class_number: 1, full_name: 'ชื่อ จริง', student_emails: { email: 's1@student.nssc.ac.th' } },
-        { class: 'ม.3/1', class_number: 2, full_name: 'คนที่ยังไม่ส่ง', student_emails: [{ email: 's2@student.nssc.ac.th' }] },
-        { class: 'ม.3/2', class_number: 3, full_name: 'ไม่มีอีเมล', student_emails: null },
+        { class: 'ม.3/1', class_number: 1, full_name: 'ส่งแล้ว', student_emails: { email: 'S1@student.nssc.ac.th' }, writing_assessments: [{ id: 'w1', created_at: 't', mastery_level: 'Mastery', guess_tag: 'OK', writing_assessment_scores: [{ score: 5, rubric_criteria: { code: 'TR' } }] }] },
+        { class: 'ม.3/1', class_number: 2, full_name: 'ยังไม่ส่ง', student_emails: [{ email: 's2@student.nssc.ac.th' }], writing_assessments: [{ id: 'w2', created_at: 't', mastery_level: 'Beginner', guess_tag: 'OK', writing_assessment_scores: [] }] },
+        { class: 'ม.3/2', class_number: 3, full_name: 'ไม่มีผลประเมิน', student_emails: null, writing_assessments: [] },
       ]);
     }
     return Response.json([
-      { id: 'n', user_email: 'S1@student.nssc.ac.th', exercise_id: 'e', created_at: '2026-10-25', submission_parts: [{ part_key: 'info', data: { fname: 'พิมพ์', lname: 'เอง', klass: 'ม.3/9', no: '9' } }], part_scores: [{ part_key: 'drafts', path: 'd1', criterion: 'TR', score: 4 }] },
-      { id: 'o', user_email: 's1@student.nssc.ac.th', exercise_id: 'e', created_at: '2026-10-24', submission_parts: [], part_scores: [] },
-      { id: 'x', user_email: 'stranger@student.nssc.ac.th', exercise_id: 'e', created_at: '2026-10-23', submission_parts: [{ part_key: 'info', data: { fname: 'ไม่อยู่', lname: 'ในรายชื่อ', klass: 'ม.3/5', no: '5' } }], part_scores: [] },
+      { user_email: 's1@student.nssc.ac.th', created_at: '2026-10-25' },
+      { user_email: 'S1@student.nssc.ac.th', created_at: '2026-10-24' },
+      { user_email: 'stranger@student.nssc.ac.th', created_at: '2026-10-23' },
     ]);
   }) as typeof fetch;
-  const res = (await (await get('/v1/teacher/overview?exercise_id=e', 'teacher@nssc.ac.th', TEACHER)).json()) as any;
-  assert.deepEqual(res.items.map((i: any) => i.id), ['n', 'x']);
-  assert.deepEqual(res.items[0].profile, { name: 'ชื่อ จริง', klass: 'ม.3/1', no: '1' }); // roster beats self-reported
-  assert.equal(res.items[0].in_roster, true);
-  assert.equal(res.items[1].in_roster, false);
-  assert.equal(res.items[1].profile.name, 'ไม่อยู่ ในรายชื่อ'); // falls back to what the web reported
-  assert.deepEqual(res.missing.map((m: any) => m.name).sort(), ['ไม่มีอีเมล', 'คนที่ยังไม่ส่ง'].sort());
-  assert.ok(urls.some((u) => u.includes('exercise_id=eq.e')));
+  const res = (await (await get('/v1/teacher/students?exercise_id=e', 'teacher@nssc.ac.th', TEACHER)).json()) as any;
+  assert.equal(res.items.length, 3); // the roster is the list; strangers who submitted are not added
+  const [a, b, c2] = res.items;
+  assert.deepEqual(a.submission, { submitted: true, count: 2, last_at: '2026-10-25' });
+  assert.equal(a.assessment.scores[0].score, 5);
+  assert.equal(b.submission.submitted, false);
+  assert.equal(b.assessment.id, 'w2'); // assessed even though not submitted
+  assert.equal(c2.assessment, null);
+  assert.equal(c2.submission.submitted, false);
+  assert.ok(urls.some((x) => x.includes('exercise_id=eq.e')));
 });
 
 test.after(() => {

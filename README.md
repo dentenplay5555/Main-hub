@@ -49,7 +49,9 @@ part ใหม่หรือ part ที่หายไปไม่ต้อง
 |---|---|---|
 | `/v1/me` | ทุกคน | อีเมลและ role (`teacher` ถ้าอยู่ใน `TEACHER_EMAILS` ไม่งั้น `student`) |
 | `/v1/my/submissions`, `/v1/my/submissions/:id` | ทุกคน | งานของตัวเองเท่านั้น (กรองด้วย user id จาก token เสมอ) พร้อมทุก part และคะแนน |
-| `/v1/teacher/submissions`, `/:id`, `/v1/teacher/scores` | ครู (ไม่ใช่ครู = 403) | งานและคะแนนทั้งหมด กรองด้วย `exercise_id`, `email`, `limit` ได้ |
+| `/v1/my/assessment` | ทุกคน | ผลประเมินจริงของตัวเอง (จับคู่ด้วยอีเมลกับรายชื่อ) |
+| `/v1/teacher/students` | ครู | รายชื่อทั้งห้อง + ผลประเมินล่าสุด + สถานะส่งแบบฝึก (แยกกัน) |
+| `/v1/teacher/submissions`, `/:id`, `/v1/teacher/scores` | ครู (ไม่ใช่ครู = 403) | งานและคะแนนที่ส่งผ่าน gateway กรองด้วย `exercise_id`, `email`, `limit` ได้ |
 
 ตั้งอีเมลครูนอก repo (repo เป็น public): ที่ Cloudflare Dashboard → Workers → dentenplay-gateway → Settings → Variables (`TEACHER_EMAILS`) หรือ `npx wrangler secret put TEACHER_EMAILS` ใส่อีเมลเดียวหรือหลายอันคั่นด้วยจุลภาค `wrangler.toml` ตั้ง `keep_vars = true` ไว้ จึงไม่ลบค่าที่ตั้งใน Dashboard ตอน deploy
 
@@ -104,7 +106,8 @@ Workflow `.github/workflows/deploy-pages.yml` ทดสอบ (`npm test`) แ�
 
 - นักเรียน: ล็อกอิน Google (Supabase Auth) → เห็นเรดาร์ 5 ทักษะ ระดับ (Beginner / Structure OK / Language Dev / Mastery) คะแนน x/9 สัญญาณเตือน (Lucky / Careless) ขั้นตอนต่อไป และเหรียญรางวัล
 - ครู (อีเมลใน `TEACHER_EMAILS`): ภาพรวมห้อง การกระจายคะแนน ตัวกรองห้อง/ระดับ/ธง ค้นหา รายงานรายบุคคลแบบเดียวกับที่นักเรียนเห็น รายชื่อคนที่ยังไม่ส่ง และดาวน์โหลด CSV (ชื่อ/ห้อง/เลขที่ใช้จากตาราง `students` + `student_emails` ใน Supabase ถ้าอีเมลตรงกัน ไม่งั้นใช้ที่เว็บแบบฝึกรายงาน)
-- กฎวินิจฉัยอยู่ที่ `apps/learning/src/lib/diagnose.ts` (มีเทสต์) ย้ายจากหน้า PRISM เดิมและ view ใน Supabase: ใช้คะแนน TR/ME/LR/GRA/CC ของกลุ่มล่าสุดที่ครบทั้ง 5 ด้าน (เช่น `drafts/d3`) ถ้าไม่ครบจะไม่เดาระดับ
+- **สถิติ (เรดาร์ ระดับ flag เหรียญ) มาจากข้อมูลจริงใน Supabase** (`writing_assessments` + `writing_assessment_scores`, จับคู่นักเรียนด้วยอีเมลผ่าน `student_emails`) ส่วน **การส่งแบบฝึก** (ส่ง/ไม่ส่ง) ดึงแยกจาก `raw_submissions` สองอย่างไม่ปนกัน: endpoint `/v1/my/assessment`, `/v1/teacher/students`
+- กฎวินิจฉัยอยู่ที่ `apps/learning/src/lib/diagnose.ts` (มีเทสต์) ตรงกับ view `writing_assessment_final` ใน Supabase: ใช้คะแนน TR/ME/LR/GRA/CC ถ้าไม่ครบ 5 ด้านจะไม่เดาระดับ ถ้าระดับเดิมที่นำเข้าจาก PRISM ไม่ตรงกับคะแนนรายด้าน (ตอนนี้ 25 คน) ครูจะเห็นป้ายเตือน
 - ตั้งค่า (ไม่ลับทั้งหมด): `VITE_GATEWAY_URL`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_KEY` (publishable key), `VITE_EXERCISE_ID` (ว่าง = ทุกแบบฝึก)
 - เปิดบนเว็บ: repo Variable `INCLUDE_LEARNING=1` แล้วรัน workflow ซ้ำ และเพิ่ม URL ของเว็บ (เช่น `https://<user>.github.io/Main-hub/learning/`) ใน Supabase → Authentication → URL Configuration → Redirect URLs
 

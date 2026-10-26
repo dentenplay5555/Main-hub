@@ -1,51 +1,93 @@
 import type { Session } from '@supabase/supabase-js';
 import { useEffect, useState } from 'react';
 import Report from './Report';
-import { api, ApiError } from './lib/api.ts';
-import { diagnose, type Diagnosis } from './lib/diagnose.ts';
+import { api, ApiError, type Profile } from './lib/api.ts';
+import { diagnoseScores, type Diagnosis } from './lib/diagnose.ts';
 
-type State = { kind: 'loading' } | { kind: 'error'; message: string } | { kind: 'none' } | { kind: 'incomplete' } | { kind: 'ok'; d: Diagnosis; at: string };
+type Result =
+  | { kind: 'loading' }
+  | { kind: 'error'; message: string }
+  | { kind: 'not_in_roster' }
+  | { kind: 'no_assessment'; profile: Profile | null }
+  | { kind: 'incomplete'; profile: Profile | null }
+  | { kind: 'ok'; profile: Profile | null; d: Diagnosis };
+type Sub = { submitted: boolean; last_at: string | null } | null;
 
 export default function StudentView({ session }: { session: Session }) {
-  const [st, setSt] = useState<State>({ kind: 'loading' });
+  const [res, setRes] = useState<Result>({ kind: 'loading' });
+  const [sub, setSub] = useState<Sub>(null);
+
   useEffect(() => {
     let live = true;
-    api.mine(session).then(
-      (sub) => {
+    // Stats come from the real database; submission status is a separate call and never blocks the stats.
+    api.myAssessment(session).then(
+      (a) => {
         if (!live) return;
-        if (!sub) return setSt({ kind: 'none' });
-        const d = diagnose(sub.scores);
-        setSt(d ? { kind: 'ok', d, at: sub.created_at } : { kind: 'incomplete' });
+        if (!a.in_roster) return setRes({ kind: 'not_in_roster' });
+        if (!a.assessment) return setRes({ kind: 'no_assessment', profile: a.profile });
+        const d = diagnoseScores(a.assessment.scores);
+        setRes(d ? { kind: 'ok', profile: a.profile, d } : { kind: 'incomplete', profile: a.profile });
       },
-      (e: unknown) => live && setSt({ kind: 'error', message: e instanceof ApiError ? e.message : 'เกิดข้อผิดพลาด' }),
+      (e: unknown) => live && setRes({ kind: 'error', message: e instanceof ApiError ? e.message : 'เกิดข้อผิดพลาด' }),
     );
+    api.mySubmission(session).then((x) => live && setSub(x), () => live && setSub(null));
     return () => { live = false; };
   }, [session]);
 
-  if (st.kind === 'loading') return <p className="muted center">กำลังโหลดผลของคุณ…</p>;
-  if (st.kind === 'error') return <p className="notice bad">{st.message}</p>;
-  if (st.kind === 'none') {
+  const submission = sub && (
+    <div className={`card subcard ${sub.submitted ? 'done' : ''}`}>
+      <b>แบบฝึก</b>{' '}
+      {sub.submitted
+        ? <span>✅ ส่งแล้ว <span className="muted small">(ล่าสุด {sub.last_at ? new Date(sub.last_at).toLocaleString('th-TH') : '–'})</span></span>
+        : <span>⏳ ยังไม่ได้ส่งแบบฝึก</span>}
+    </div>
+  );
+
+  if (res.kind === 'loading') return <p className="muted center">กำลังโหลดผลของคุณ…</p>;
+  if (res.kind === 'error') return <p className="notice bad">{res.message}</p>;
+  if (res.kind === 'not_in_roster') {
     return (
       <div className="empty">
-        <div className="big">📝</div>
-        <h2>ยังไม่ได้ส่งงาน</h2>
-        <p className="muted">ยังไม่มีข้อมูลการส่งงานของคุณในระบบ กรุณาทำแบบฝึกให้เสร็จ หรือติดต่อครูผู้สอน</p>
+        <div className="big">🔎</div>
+        <h2>ไม่พบอีเมลนี้ในรายชื่อนักเรียน</h2>
+        <p className="muted">กรุณาใช้อีเมลโรงเรียนของตัวเอง หรือแจ้งครูผู้สอนให้ตรวจรายชื่อ</p>
       </div>
     );
   }
-  if (st.kind === 'incomplete') {
+  const who = res.profile && (
+    <p className="muted small">{res.profile.name} · {res.profile.klass} เลขที่ {res.profile.no ?? '–'}</p>
+  );
+  if (res.kind === 'no_assessment') {
     return (
-      <div className="empty">
-        <div className="big">⏳</div>
-        <h2>ยังไม่มีผลคะแนนครบ 5 ด้าน</h2>
-        <p className="muted">ระบบได้รับงานของคุณแล้ว แต่ยังไม่มีคะแนนครบทั้ง TR, ME, LR, GRA, CC จึงยังวินิจฉัยระดับไม่ได้</p>
-      </div>
+      <>
+        {who}
+        <div className="empty">
+          <div className="big">📝</div>
+          <h2>ยังไม่มีผลประเมินของคุณ</h2>
+          <p className="muted">ยังไม่พบผลของคุณในระบบ กรุณาติดต่อครูผู้สอน</p>
+        </div>
+        {submission}
+      </>
+    );
+  }
+  if (res.kind === 'incomplete') {
+    return (
+      <>
+        {who}
+        <div className="empty">
+          <div className="big">⏳</div>
+          <h2>ผลประเมินยังไม่ครบ 5 ด้าน</h2>
+          <p className="muted">ยังไม่มีคะแนนครบทั้ง TR, ME, LR, GRA, CC จึงยังวินิจฉัยระดับไม่ได้</p>
+        </div>
+        {submission}
+      </>
     );
   }
   return (
     <>
-      <p className="muted small">ส่งล่าสุด {new Date(st.at).toLocaleString('th-TH')}</p>
-      <Report d={st.d} onPrint={() => window.print()} />
+      {who}
+      {submission}
+      <Report d={res.d} onPrint={() => window.print()} />
     </>
   );
 }

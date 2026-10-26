@@ -32,20 +32,32 @@ async function get<T>(session: Session, path: string): Promise<T> {
 
 export interface Me { email: string; role: 'teacher' | 'student' }
 export interface Profile { name: string | null; klass: string | null; no: string | null }
-export interface OverviewItem { id: string; user_email: string; exercise_id: string | null; created_at: string; profile: Profile; in_roster?: boolean; scores: ScoreRow[] }
-export interface Overview { items: OverviewItem[]; missing: Profile[] }
+export interface Assessment {
+  id: string;
+  created_at: string;
+  scores: Array<{ criterion: string; score: number }>;
+  imported: { level: string | null; flag: string | null };
+}
+export interface StudentItem {
+  email: string | null;
+  profile: Profile;
+  /** Real results from the database. Independent of submission. */
+  assessment: Assessment | null;
+  /** Whether the practice exercise was submitted. Independent of assessment. */
+  submission: { submitted: boolean; count: number; last_at: string | null };
+}
 
 const ex = EXERCISE_ID ? `exercise_id=${encodeURIComponent(EXERCISE_ID)}` : '';
 
 export const api = {
   me: (s: Session) => get<Me & { ok: true }>(s, '/v1/me'),
-  /** Newest submission of the signed-in student with all of its scores, or null if they have not submitted. */
-  async mine(s: Session): Promise<{ created_at: string; scores: ScoreRow[] } | null> {
-    const list = await get<{ items: Array<{ id: string }> }>(s, `/v1/my/submissions?limit=1${ex ? `&${ex}` : ''}`);
-    const id = list.items[0]?.id;
-    if (!id) return null;
-    const d = await get<{ item: { created_at: string; scores: ScoreRow[] } }>(s, `/v1/my/submissions/${id}`);
-    return d.item;
+  /** The signed-in student's real result (matched by email to the roster). */
+  myAssessment: (s: Session) => get<{ in_roster: boolean; profile: Profile | null; assessment: Assessment | null }>(s, '/v1/my/assessment'),
+  /** Whether this student has submitted the practice exercise. Separate from the assessment above. */
+  async mySubmission(s: Session): Promise<{ submitted: boolean; last_at: string | null }> {
+    const list = await get<{ items: Array<{ created_at: string }> }>(s, `/v1/my/submissions?limit=1${ex ? `&${ex}` : ''}`);
+    return { submitted: list.items.length > 0, last_at: list.items[0]?.created_at ?? null };
   },
-  overview: (s: Session) => get<Overview>(s, `/v1/teacher/overview${ex ? `?${ex}` : ''}`).then((r) => ({ items: r.items, missing: r.missing ?? [] })),
+  /** Teacher: the whole roster with assessment + submission status. */
+  teacherStudents: (s: Session) => get<{ items: StudentItem[] }>(s, `/v1/teacher/students${ex ? `?${ex}` : ''}`).then((r) => r.items),
 };
