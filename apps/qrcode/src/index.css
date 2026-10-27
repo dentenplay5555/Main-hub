@@ -1,0 +1,145 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    margin: 0;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Scrollbar styling for dark theme */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #252d3f;
+    border-radius: 4px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: #3b4766;
+  }
+
+  /* Focus ring: accessible visible indicator */
+  *:focus-visible {
+    outline: 2px solid #6366f1;
+    outline-offset: 2px;
+  }
+
+  /* Remove default focus outline only when we add our own */
+  button:focus:not(:focus-visible),
+  a:focus:not(:focus-visible) {
+    outline: none;
+  }
+}
+
+@layer components {
+  /* Panel card used throughout the app */
+  .studio-panel {
+    @apply bg-studio-panel border border-studio-border rounded-panel;
+  }
+
+  .studio-panel-hover {
+    @apply studio-panel transition-colors duration-150 hover:border-studio-border-hover;
+  }
+
+  /* Input fields */
+  .studio-input {
+    @apply w-full px-3 py-2 bg-studio-surface border border-studio-border rounded-lg
+           text-studio-text placeholder:text-studio-muted/60
+           transition-colors duration-150
+           hover:border-studio-border-hover
+           focus:border-studio-accent focus:ring-1 focus:ring-studio-accent/30;
+  }
+
+  .studio-select {
+    @apply studio-input appearance-none cursor-pointer;
+  }
+
+  .studio-label {
+    @apply block text-sm font-medium text-studio-muted mb-1.5;
+  }
+
+  /* Buttons */
+  .studio-btn {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2
+           text-sm font-medium rounded-lg
+           transition-all duration-150
+           focus-visible:outline-2 focus-visible:outline-studio-accent focus-visible:outline-offset-2;
+  }
+
+  .studio-btn-primary {
+    @apply studio-btn bg-studio-accent text-white
+           hover:bg-studio-accent-hover active:bg-studio-accent-dim;
+  }
+
+  .studio-btn-secondary {
+    @apply studio-btn bg-studio-surface border border-studio-border text-studio-text
+           hover:bg-studio-panel hover:border-studio-border-hover;
+  }
+
+  .studio-btn-ghost {
+    @apply studio-btn text-studio-muted hover:text-studio-text hover:bg-studio-surface;
+  }
+
+  .studio-btn-danger {
+    @apply studio-btn bg-studio-error/10 text-studio-error border border-studio-error/20
+           hover:bg-studio-error/20;
+  }
+
+  /* Sidebar nav item */
+  .nav-item {
+    @apply flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium
+           text-studio-muted transition-colors duration-150
+           hover:text-studio-text hover:bg-studio-surface;
+  }
+
+  .nav-item.active {
+    @apply text-studio-accent bg-studio-accent/10;
+  }
+
+  /* Tab system */
+  .studio-tab {
+    @apply px-3 py-2 text-sm font-medium text-studio-muted rounded-lg
+           transition-colors duration-150 cursor-pointer
+           hover:text-studio-text hover:bg-studio-surface;
+  }
+
+  .studio-tab.active {
+    @apply text-studio-accent bg-studio-accent/10;
+  }
+
+  /* Checkerboard for transparent preview */
+  .checkerboard {
+    background-image:
+      linear-gradient(45deg, #1a2035 25%, transparent 25%),
+      linear-gradient(-45deg, #1a2035 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, #1a2035 75%),
+      linear-gradient(-45deg, transparent 75%, #1a2035 75%);
+    background-size: 16px 16px;
+    background-position: 0 0, 0 8px, 8px -8px, -8px 0px;
+    background-color: #0f1525;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}
