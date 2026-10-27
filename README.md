@@ -16,7 +16,10 @@ Hub (apps/hub)    Exercise Web (แยก)    เว็บอื่น ๆ
 apps/hub          หน้าแรก + ตัวสลับแอป (Vite + React)   ← รายชื่อแอปแก้ที่ apps/hub/src/apps.ts
 apps/exam         Exam Management (React + Vite)         ← ยังใช้ API เดิมใน apps/exam/functions
 apps/learning     Learning System (React + Vite)         ← หน้านักเรียน/ครู อ่านผ่าน gateway (ดูหัวข้อ Learning System)
+apps/music        Music Player — หน้าเว็บขอเพลงผ่าน QR (React + Vite)  ← ดูหัวข้อ Music Player
 services/gateway  Cloudflare Worker (Hono + jose)        ← ตัวใหม่ ดูหัวข้อด้านล่าง
+services/music-api Cloudflare Worker + D1 + Durable Object ← API/WebSocket ของ Music Player (แยกจาก gateway)
+packages/shared   types/constants ที่ใช้ร่วมกันระหว่าง apps/music กับ services/music-api
 db/migrations     SQL สำหรับ Supabase                     ← รันใน SQL editor ตามลำดับเลข
 scripts/build.mjs build Hub + exam รวมเป็น dist/
 ```
@@ -108,12 +111,37 @@ Workflow `.github/workflows/deploy-pages.yml` ทดสอบ (`npm test`) แ�
 - ตั้งค่า (ไม่ลับทั้งหมด): `VITE_GATEWAY_URL`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_KEY` (publishable key), `VITE_EXERCISE_ID` (ว่าง = ทุกแบบฝึก)
 - เปิดบนเว็บ: repo Variable `INCLUDE_LEARNING=1` แล้วรัน workflow ซ้ำ และเพิ่ม URL ของเว็บ (เช่น `https://<user>.github.io/Main-hub/learning/`) ใน Supabase → Authentication → URL Configuration → Redirect URLs
 
+## Music Player (`apps/music` + `services/music-api`)
+
+ย้ายมาจาก repo `Music-Player-For-Classroom-self-hosted` (ห้องเรียนสร้างห้อง แล้วนักเรียนสแกน QR ขอเพลง YouTube เข้าคิว)
+หน้าเว็บอยู่ที่ `apps/music` ส่วน API (Hono + D1 + Durable Object สำหรับ WebSocket) อยู่ที่ `services/music-api`
+ไม่ได้ใช้ Supabase และไม่ผ่าน gateway ของ Hub มี D1 migration ของตัวเองใน `services/music-api/migrations`
+
+**รันในเครื่อง (หรือในวง Wi-Fi ห้องเรียน)**
+```bash
+npm install
+cp services/music-api/.dev.vars.example services/music-api/.dev.vars   # แล้วแก้ ADMIN_PASSWORD เป็นรหัสของคุณเอง
+npm run d1:migrate:local -w services/music-api    # ครั้งแรกครั้งเดียว
+npm run dev -w services/music-api                 # API :3001
+npm run dev -w apps/music                         # เว็บ :5173 (proxy /api ไป :3001)
+```
+- **ไม่มีรหัสผ่านเริ่มต้น** ถ้าไม่ตั้ง `ADMIN_PASSWORD` การเข้า Admin จะถูกปฏิเสธ (503)
+- ให้มือถือสแกน QR ได้: ตั้ง `PUBLIC_URL` (เช่น `http://192.168.1.50:5173`) ใน `services/music-api/wrangler.toml`
+- เปิดผ่าน IP แบบ `http://` ได้ (โค้ดไม่พึ่ง `crypto.randomUUID` / `navigator.clipboard` ที่ใช้ได้เฉพาะ HTTPS/localhost)
+
+**ขึ้นเว็บ (GitHub Pages + Worker)** — หน้าเว็บอยู่บน Pages แต่ API ต้อง deploy เป็น Worker แยก
+1. `npx wrangler d1 create qr-music-db` แล้วใส่ `database_id` จริงใน `services/music-api/wrangler.toml`
+2. `npm run d1:migrate:remote -w services/music-api`
+3. `cd services/music-api && npx wrangler secret put ADMIN_PASSWORD && npx wrangler deploy`
+4. ใส่ origin ของ Pages (เช่น `https://<user>.github.io`) ใน `ALLOWED_ORIGINS` ของ `wrangler.toml` แล้ว deploy ซ้ำ
+5. GitHub → Settings → Actions → **Variables**: `INCLUDE_MUSIC` = `1` และ `VITE_MUSIC_API_BASE` = origin ของ Worker (เช่น `https://qr-music-api.<account>.workers.dev`) แล้วรัน workflow ซ้ำ
+
 ## ยังไม่ได้ทำ (v0.1)
 
 - rate limit ต่อผู้ใช้ และกฎจำนวนครั้งที่ส่ง (Pretest 1, Cycle 1/2 รอบละ 3, Post Test 1) ที่ต้องบังคับฝั่ง gateway/DB
 - รายงานครูแบบสรุป (กระจายคะแนน ระดับความรู้ flag รายห้อง) ซึ่งตอนนี้มีแค่ข้อมูลดิบจาก `/v1/teacher/scores`
 - ย้าย engine CbKST จาก `apps/exam/server/cbkst.ts` เข้า gateway
-- Learning System (รวม Dashboard), Weather, Music Player ยังเป็น "เร็ว ๆ นี้" ใน Hub
+- Learning System (รวม Dashboard) และ Weather ยังเป็น "เร็ว ๆ นี้" ใน Hub (Music Player จะขึ้นเมื่อตั้ง `INCLUDE_MUSIC=1`)
 - ตัวสลับแอปมีเฉพาะหน้า Hub ยังไม่ได้ฝังในแต่ละแอป
 - ล็อกอินของ exam บน GitHub Pages: API คนละโดเมนกับหน้าเว็บ ทำให้ cookie ใช้ไม่ได้ ต้องย้ายมาใช้ token ผ่าน gateway ก่อนค่อยตั้ง `INCLUDE_EXAM=1`
 

@@ -2,6 +2,8 @@ const base = import.meta.env.BASE_URL;
 // Set by scripts/build.mjs (INCLUDE_EXAM=1). Off = the exam tile shows as "เร็ว ๆ นี้" and is not published.
 const includeExam = import.meta.env.VITE_INCLUDE_EXAM === '1';
 const includeLearning = import.meta.env.VITE_INCLUDE_LEARNING === '1';
+// Set by scripts/build.mjs (INCLUDE_MUSIC=1). Off = the music tile shows as "เร็ว ๆ นี้" and is not published.
+const includeMusic = import.meta.env.VITE_INCLUDE_MUSIC === '1';
 
 export interface AppEntry {
   id: string;
@@ -41,6 +43,7 @@ export const apps: AppEntry[] = [
     name: 'Music Player',
     description: 'ขอเพลงผ่าน QR สำหรับกิจกรรม',
     color: '#f472b6',
+    href: includeMusic ? `${base}music/` : undefined,
   },
   {
     id: 'electrical',

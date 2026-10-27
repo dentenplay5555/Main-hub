@@ -1,0 +1,3 @@
+# Copy to .dev.vars (git-ignored) for `npm run dev -w services/music-api`.
+# Choose your own password; there is no built-in default.
+ADMIN_PASSWORD=change-me

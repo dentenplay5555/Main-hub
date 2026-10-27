@@ -6,12 +6,15 @@
     "apps/hub",
     "apps/exam",
     "apps/learning",
-    "services/gateway"
+    "apps/music",
+    "services/gateway",
+    "services/music-api",
+    "packages/shared"
   ],
   "scripts": {
     "dev": "npm run dev -w apps/hub",
     "build": "node scripts/build.mjs",
-    "typecheck": "npm run typecheck -w apps/exam && npm run typecheck -w apps/hub && npm run typecheck -w apps/learning && npm run typecheck -w services/gateway",
+    "typecheck": "npm run typecheck -w apps/exam && npm run typecheck -w apps/hub && npm run typecheck -w apps/learning && npm run typecheck -w apps/music && npm run typecheck -w services/gateway && npm run typecheck -w services/music-api && npm run typecheck -w packages/shared",
     "test": "npm test -w apps/exam && npm test -w apps/learning && npm test -w services/gateway"
   }
 }
