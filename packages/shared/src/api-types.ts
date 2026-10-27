@@ -100,6 +100,8 @@ export interface UpdateRoomRequest {
 }
 
 export interface AdminRoomItem extends Room {
+  /** Secret that lets a browser control this room's player. Only ever sent to admins. */
+  playerToken?: string;
   queuedCount: number;
   playingTitle: string | null;
   playingVideoId: string | null;
@@ -117,6 +119,8 @@ export interface DashboardStats {
 
 export interface AdminRoomDetail {
   room: Room;
+  /** Secret that lets a browser control this room's player. Only ever sent to admins. */
+  playerToken?: string;
   settings: RoomSettings;
   playing: Song | null;
   queue: Song[];

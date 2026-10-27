@@ -6,6 +6,8 @@ import {
   removeSongFromQueue,
   clearRoomQueue,
   getRoomById,
+  sanitizeRoom,
+  ensurePlayerToken,
   broadcastToRoom,
   getDashboardStats,
   getRoomFullDetails,
@@ -22,7 +24,7 @@ import {
   PlayerCommandRequest,
   RoomSettings,
 } from '@qr-music/shared';
-import { signAdminToken, timingSafeEqual, generateSecureRoomCode } from '../services/crypto';
+import { signAdminToken, timingSafeEqual, generateSecureRoomCode, generateSecureToken } from '../services/crypto';
 
 export const adminRoutes = new Hono<{ Bindings: Env; Variables: AppVariables }>();
 
@@ -133,7 +135,8 @@ adminRoutes.get('/dashboard', async (c) => {
     }
 
     roomItems.push({
-      ...room,
+      ...sanitizeRoom(room),
+      playerToken: await ensurePlayerToken(c.env.DB, room),
       queuedCount: countRes?.count ?? 0,
       playingTitle: playing?.title ?? null,
       playingVideoId: playing?.video_id ?? null,
@@ -185,7 +188,8 @@ adminRoutes.get('/rooms', async (c) => {
     }
 
     roomItems.push({
-      ...room,
+      ...sanitizeRoom(room),
+      playerToken: await ensurePlayerToken(c.env.DB, room),
       queuedCount: countRes?.count ?? 0,
       playingTitle: playing?.title ?? null,
       playingVideoId: playing?.video_id ?? null,
@@ -270,7 +274,15 @@ adminRoutes.post('/rooms', async (c) => {
   await c.env.DB.prepare(`
     INSERT INTO rooms (id, code, name, status, queue_version, settings_json, created_at, updated_at)
     VALUES (?, ?, ?, 'open', 0, ?, ?, ?)
-  `).bind(id, code, body.name.trim(), JSON.stringify(initialSettings), now, now).run();
+  `).bind(
+    id,
+    code,
+    body.name.trim(),
+    // Every room gets its own player token (lets the display machine control playback without an admin login)
+    JSON.stringify({ ...initialSettings, playerToken: generateSecureToken(24) }),
+    now,
+    now
+  ).run();
 
   const newRoom: Room = {
     id,
@@ -330,7 +342,7 @@ adminRoutes.patch('/rooms/:id', async (c) => {
     WHERE id = ?
   `).bind(name, status, now, id).run();
 
-  const updatedRoom = { ...room, name, status, updated_at: now };
+  const updatedRoom = sanitizeRoom({ ...room, name, status, updated_at: now });
 
   await broadcastToRoom(c.env, room.code, {
     type: 'room.updated',
@@ -414,7 +426,7 @@ adminRoutes.post('/rooms/:id/rotate-code', async (c) => {
     WHERE id = ?
   `).bind(newCode, now, id).run();
 
-  const updatedRoom = { ...room, code: newCode, updated_at: now };
+  const updatedRoom = sanitizeRoom({ ...room, code: newCode, updated_at: now });
 
   // Broadcast code rotation to OLD room's DO so connected players know to reconnect
   // We send the updated room object (which contains the new code) so clients can redirect.

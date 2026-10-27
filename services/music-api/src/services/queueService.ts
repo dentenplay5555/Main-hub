@@ -10,7 +10,7 @@ import {
   AdminRoomDetail,
   RATE_LIMITS,
 } from '@qr-music/shared';
-import { sha256 } from './crypto';
+import { sha256, generateSecureToken } from './crypto';
 
 // Retry helper for concurrent database transaction conflicts
 async function withRetry<T>(fn: () => Promise<T>, maxRetries = 3): Promise<T> {
@@ -52,6 +52,62 @@ export function parseRoomSettings(settingsJson?: string): RoomSettings {
   } catch {
     return { maxQueue: 100, allowDuplicates: false, cooldownSeconds: 5 };
   }
+}
+
+// The player token lives inside rooms.settings_json. Anything that is sent to non-admins
+// (public API, WebSocket broadcasts) must pass through sanitizeRoom() first, otherwise
+// everyone who scans the QR code could control the player.
+export function sanitizeRoom<T extends { settings_json: string }>(room: T): T {
+  try {
+    const parsed = JSON.parse(room.settings_json || '{}');
+    if (parsed && typeof parsed === 'object' && 'playerToken' in parsed) {
+      delete parsed.playerToken;
+      return { ...room, settings_json: JSON.stringify(parsed) };
+    }
+  } catch {
+    // malformed settings: nothing to strip
+  }
+  return room;
+}
+
+function readPlayerToken(settingsJson?: string): string {
+  try {
+    const token = JSON.parse(settingsJson || '{}')?.playerToken;
+    return typeof token === 'string' ? token : '';
+  } catch {
+    return '';
+  }
+}
+
+// Returns the room's player token, creating one the first time (rooms created before tokens existed).
+// The UPDATE is conditional on the settings not having changed, so two concurrent callers cannot
+// hand out two different tokens.
+export async function ensurePlayerToken(db: Env['DB'], room: Room, attempt = 0): Promise<string> {
+  const existing = readPlayerToken(room.settings_json);
+  if (existing) return existing;
+  if (attempt >= 3) throw new Error('PLAYER_TOKEN_ERROR: ไม่สามารถสร้าง Player Token ได้');
+
+  let current: Record<string, unknown> = {};
+  try {
+    current = JSON.parse(room.settings_json || '{}') ?? {};
+  } catch {
+    // start from empty settings
+  }
+  const token = generateSecureToken(24);
+  const next = JSON.stringify({ ...current, playerToken: token });
+
+  const res = await db
+    .prepare('UPDATE rooms SET settings_json = ? WHERE id = ? AND settings_json = ?')
+    .bind(next, room.id, room.settings_json)
+    .run();
+
+  if ((res.meta?.changes ?? 0) === 0) {
+    // Settings changed underneath us: reload and try again (may already contain a token now).
+    const fresh = await getRoomById(db, room.id);
+    if (!fresh) throw new Error('ROOM_NOT_FOUND');
+    return ensurePlayerToken(db, fresh, attempt + 1);
+  }
+  return token;
 }
 
 // Strip internal security token hashes from public song response
@@ -130,7 +186,7 @@ export async function getQueueSnapshot(
   }
 
   return {
-    room,
+    room: sanitizeRoom(room),
     playing: playing ? sanitizeSong(playing) : null,
     queue: (queueResult.results ?? []).map(sanitizeSong),
     queueVersion: room.queue_version,
@@ -654,7 +710,7 @@ export async function updateRoomSettings(
     type: 'room.updated',
     roomCode: room.code,
     version: room.queue_version,
-    payload: { room: { ...room, settings_json: jsonStr, updated_at: now } },
+    payload: { room: sanitizeRoom({ ...room, settings_json: jsonStr, updated_at: now }) },
   });
 
   return updated;
@@ -752,6 +808,7 @@ export async function getRoomFullDetails(
   if (!room) throw new Error('ROOM_NOT_FOUND');
 
   const settings = parseRoomSettings(room.settings_json);
+  const playerToken = await ensurePlayerToken(db, room);
 
   const playing = await db
     .prepare("SELECT * FROM songs WHERE room_id = ? AND status = 'playing' LIMIT 1")
@@ -786,7 +843,8 @@ export async function getRoomFullDetails(
   }
 
   return {
-    room,
+    room: sanitizeRoom(room),
+    playerToken,
     settings,
     playing: playing ? sanitizeSong(playing) : null,
     queue: (queue.results ?? []).map(sanitizeSong),

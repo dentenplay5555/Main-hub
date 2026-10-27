@@ -35,7 +35,9 @@ import {
   Music,
   Clock,
   Sparkles,
+  Copy,
 } from 'lucide-react';
+import { copyText } from '../lib/clipboard';
 
 export const AdminPage: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
@@ -159,6 +161,21 @@ export const AdminPage: React.FC = () => {
   const handleLogout = () => {
     api.adminLogout();
     setIsAuthenticated(false);
+  };
+
+  // Player screen link. The token lets a browser that is NOT logged in as admin (e.g. the classroom
+  // display machine) control playback, so links that contain it should be kept private.
+  const playerPath = (code: string, token?: string) =>
+    `${import.meta.env.BASE_URL}p/${code}${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+
+  const copyPlayerLink = async (code: string, token: string | undefined, publicUrl?: string) => {
+    const origin = publicUrl ? publicUrl.replace(/\/+$/, '') : window.location.origin;
+    const url = `${origin}${playerPath(code, token)}`;
+    showToast(
+      (await copyText(url))
+        ? 'คัดลอกลิงก์จอ Player แล้ว (มีรหัสควบคุม อย่าแชร์ให้ผู้อื่น)'
+        : 'คัดลอกไม่สำเร็จ'
+    );
   };
 
   const openRoomControl = (roomId: string) => {
@@ -555,7 +572,7 @@ export const AdminPage: React.FC = () => {
                       <div className="pt-3 border-t border-white/10 flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <a
-                            href={`${import.meta.env.BASE_URL}p/${room.code}`}
+                            href={playerPath(room.code, room.playerToken)}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="p-1.5 rounded-lg bg-jukebox-surface hover:bg-jukebox-hover text-slate-400 hover:text-white transition-colors"
@@ -656,7 +673,7 @@ export const AdminPage: React.FC = () => {
               {/* Quick links & Refresh */}
               <div className="flex items-center gap-2">
                 <a
-                  href={`${import.meta.env.BASE_URL}p/${roomDetail.room.code}`}
+                  href={playerPath(roomDetail.room.code, roomDetail.playerToken)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-accent-purple/20 text-accent-purple hover:bg-accent-purple/30 text-xs font-bold border border-accent-purple/30 transition-colors"
@@ -1007,7 +1024,7 @@ export const AdminPage: React.FC = () => {
                   </div>
 
                   <a
-                    href={`${import.meta.env.BASE_URL}p/${roomDetail.room.code}`}
+                    href={playerPath(roomDetail.room.code, roomDetail.playerToken)}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="w-full py-3.5 rounded-xl bg-gradient-to-r from-accent-purple to-accent-cyan text-white text-center font-bold text-sm shadow-lg shadow-accent-purple/20 flex items-center justify-center gap-2 hover:scale-[1.01] transition-all"
@@ -1015,6 +1032,17 @@ export const AdminPage: React.FC = () => {
                     <Tv className="w-4 h-4" />
                     <span>เปิดหน้าจอ Player ในแท็บใหม่</span>
                   </a>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      copyPlayerLink(roomDetail.room.code, roomDetail.playerToken, roomDetail.publicUrl)
+                    }
+                    className="w-full py-2.5 rounded-xl bg-jukebox-surface hover:bg-jukebox-hover text-slate-300 hover:text-white text-center font-semibold text-xs border border-white/10 flex items-center justify-center gap-2 transition-colors"
+                  >
+                    <Copy className="w-4 h-4" />
+                    <span>คัดลอกลิงก์จอ Player (ไปเปิดบนเครื่องอื่น)</span>
+                  </button>
                 </div>
 
                 {/* Remote Controller Pad */}

@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { Env, AppVariables } from '../types';
 import {
   getRoomByCode,
+  sanitizeRoom,
   getQueueSnapshot,
   addSongToQueue,
   advanceQueue,
@@ -33,7 +34,7 @@ publicRoutes.get('/rooms/:code', async (c) => {
   return c.json({
     ok: true,
     data: {
-      room,
+      room: sanitizeRoom(room),
       publicUrl: c.env.PUBLIC_URL || undefined,
     },
     requestId,
