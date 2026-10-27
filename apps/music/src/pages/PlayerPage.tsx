@@ -48,7 +48,10 @@ export const PlayerPage: React.FC = () => {
     if (!roomCode) return;
     try {
       const data = await api.getQueue(roomCode);
-      setSnapshot(data);
+      // Several events can trigger overlapping loads; never let an older response overwrite a newer one.
+      setSnapshot((prev) =>
+        prev && prev.room.id === data.room.id && data.queueVersion < prev.queueVersion ? prev : data
+      );
     } catch (err) {
       console.error('Failed to load queue:', err);
     }
@@ -88,6 +91,8 @@ export const PlayerPage: React.FC = () => {
     api.sendPlayerHeartbeat(roomCode, playerStateRef.current).catch(() => {});
     const heartbeatTimer = setInterval(() => {
       api.sendPlayerHeartbeat(roomCode, playerStateRef.current).catch(() => {});
+      // Safety net in case a WebSocket event was missed (flaky Wi-Fi, reconnect gap)
+      loadQueue();
     }, 15000);
 
     // WebSocket — NOT in dependency array on playerState to avoid reconnect storm
@@ -202,6 +207,7 @@ export const PlayerPage: React.FC = () => {
             <YouTubePlayer
               ref={ytRef}
               videoId={currentSong?.video_id || null}
+              playKey={currentSong?.id ?? null}
               onEnded={handleSongEnded}
               onStateChange={handleStateChange}
             />

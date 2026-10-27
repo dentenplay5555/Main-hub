@@ -185,7 +185,9 @@ export const RequestPage: React.FC = () => {
                 <CheckCircle2 className="w-4 h-4 text-accent-green shrink-0 mt-0.5" />
                 <div>
                   <p className="font-bold text-accent-green mb-0.5">
-                    ส่งเพลงเข้าคิวสำเร็จ! (ลำดับที่ #{successInfo.position})
+                    {successInfo.position === 0
+                      ? 'ส่งเพลงสำเร็จ! กำลังเล่นเพลงนี้ตอนนี้'
+                      : `ส่งเพลงเข้าคิวสำเร็จ! (ลำดับที่ #${successInfo.position})`}
                   </p>
                   <p className="text-slate-300 truncate max-w-xs sm:max-w-md">
                     {successInfo.title || 'YouTube Video'}

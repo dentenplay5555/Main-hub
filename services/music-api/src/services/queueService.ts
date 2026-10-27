@@ -191,6 +191,14 @@ export async function addSongToQueue(
       }
     }
 
+    // Is anything playing right now? If not, the earliest queued song must start immediately,
+    // otherwise it would sit in the queue until someone skips.
+    const playingNow = await db
+      .prepare("SELECT id FROM songs WHERE room_id = ? AND status = 'playing' LIMIT 1")
+      .bind(room.id)
+      .first();
+    const wasIdle = !playingNow;
+
     // Determine next position
     const maxPosResult = await db
       .prepare("SELECT COALESCE(MAX(position), 0) as max_pos FROM songs WHERE room_id = ? AND status = 'queued'")
@@ -209,6 +217,22 @@ export async function addSongToQueue(
         INSERT INTO songs (id, room_id, video_id, title, status, position, request_token_hash, created_at)
         VALUES (?, ?, ?, ?, 'queued', ?, ?, ?)
       `).bind(songId, room.id, videoId, title, nextPosition, tokenHash, now),
+
+      // 1b. If nothing is playing, start the earliest queued song. Runs in the same batch
+      //     (one transaction) as the insert, so two simultaneous requests cannot both start
+      //     (the one-playing-song unique index is the last line of defence).
+      db.prepare(`
+        UPDATE songs
+        SET status = 'playing', started_at = ?, position = 0
+        WHERE id = (
+          SELECT id FROM songs
+          WHERE room_id = ? AND status = 'queued'
+          ORDER BY position ASC LIMIT 1
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM songs WHERE room_id = ? AND status = 'playing'
+        )
+      `).bind(now, room.id, room.id),
 
       // 2. Update room version
       db.prepare(`
@@ -239,6 +263,14 @@ export async function addSongToQueue(
       created_at: now,
     };
 
+    // If the room was idle, the batch above already started the earliest queued song.
+    const snapshotAfterAdd = await getQueueSnapshot(db, room.code);
+    const startedNow = wasIdle ? snapshotAfterAdd?.playing ?? null : null;
+    if (startedNow && startedNow.id === songId) {
+      newSong.status = 'playing';
+      newSong.position = 0;
+    }
+
     // Broadcast to all connected clients
     await broadcastToRoom(env, room.code, {
       type: 'song.added',
@@ -247,7 +279,16 @@ export async function addSongToQueue(
       payload: { song: sanitizeSong(newSong), queueVersion: nextVersion },
     });
 
-    const snapshot = await getQueueSnapshot(db, room.code);
+    if (startedNow) {
+      await broadcastToRoom(env, room.code, {
+        type: 'song.started',
+        roomCode: room.code,
+        version: nextVersion,
+        payload: { song: startedNow, queueVersion: nextVersion },
+      });
+    }
+
+    const snapshot = snapshotAfterAdd;
     if (snapshot) {
       await broadcastToRoom(env, room.code, {
         type: 'queue.updated',
@@ -265,7 +306,7 @@ export async function addSongToQueue(
     return {
       song: sanitizeSong(newSong),
       queueVersion: nextVersion,
-      position: nextPosition,
+      position: newSong.position,
     };
   });
 }
