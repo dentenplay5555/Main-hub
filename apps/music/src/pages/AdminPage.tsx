@@ -61,6 +61,8 @@ export const AdminPage: React.FC = () => {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newRoomName, setNewRoomName] = useState('');
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [roomToDelete, setRoomToDelete] = useState<{ id: string; name: string; code: string } | null>(null);
+  const [isDeletingRoom, setIsDeletingRoom] = useState(false);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
 
   // Settings form state
@@ -291,6 +293,26 @@ export const AdminPage: React.FC = () => {
     }
   };
 
+  const handleDeleteRoom = async () => {
+    if (!roomToDelete) return;
+    try {
+      setIsDeletingRoom(true);
+      await api.deleteRoom(roomToDelete.id);
+      showToast(`ลบห้อง "${roomToDelete.name}" เรียบร้อยแล้ว`);
+      const deletedId = roomToDelete.id;
+      setRoomToDelete(null);
+      if (selectedRoomId === deletedId) {
+        setSelectedRoomId(null);
+        setCurrentView('dashboard');
+      }
+      await loadDashboard();
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'ลบห้องไม่สำเร็จ');
+    } finally {
+      setIsDeletingRoom(false);
+    }
+  };
+
   // If not logged in, show sleek login form
   if (!isAuthenticated) {
     return (
@@ -421,7 +443,7 @@ export const AdminPage: React.FC = () => {
                       แจ้งเตือน: ตรวจพบ {offlineAlertRooms.length} ห้องที่ยังไม่มี Player ออนไลน์
                     </h4>
                     <p className="text-xs text-slate-300">
-                      ห้อง: {offlineAlertRooms.map((r) => `${r.name} (${r.code})`).join(', ')} — กรุณาเปิดหน้าจอ Player ประจำห้องเพื่อเริ่มฉายเพลง
+                      ห้อง: {offlineAlertRooms.map((r) => `${r.name} (${r.code})`).join(', ')} : กรุณาเปิดหน้าจอ Player ประจำห้องเพื่อเริ่มฉายเพลง
                     </p>
                   </div>
                 </div>
@@ -570,7 +592,7 @@ export const AdminPage: React.FC = () => {
                       </div>
 
                       <div className="pt-3 border-t border-white/10 flex items-center justify-between">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5">
                           <a
                             href={playerPath(room.code, room.playerToken)}
                             target="_blank"
@@ -589,14 +611,23 @@ export const AdminPage: React.FC = () => {
                           >
                             <Radio className="w-3.5 h-3.5" />
                           </a>
+                          <button
+                            type="button"
+                            onClick={() => setRoomToDelete({ id: room.id, name: room.name, code: room.code })}
+                            className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 hover:text-rose-300 border border-rose-500/20 transition-colors"
+                            title="ลบห้องนี้"
+                            aria-label={`ลบห้อง ${room.name}`}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
                         </div>
 
                         <button
                           onClick={() => openRoomControl(room.id)}
-                          className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-accent-purple/20 hover:bg-accent-purple/30 text-accent-purple text-xs font-bold border border-accent-purple/40 transition-colors"
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-accent-purple/20 hover:bg-accent-purple/30 text-accent-purple text-xs font-bold border border-accent-purple/40 transition-colors"
                         >
-                          <span>Manage room</span>
-                          <span>→</span>
+                          <span>จัดการห้อง</span>
+                          <span aria-hidden="true">&rarr;</span>
                         </button>
                       </div>
                     </div>
@@ -700,6 +731,22 @@ export const AdminPage: React.FC = () => {
                   title="รีเฟรชข้อมูลห้อง"
                 >
                   <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setRoomToDelete({
+                      id: roomDetail.room.id,
+                      name: roomDetail.room.name,
+                      code: roomDetail.room.code,
+                    })
+                  }
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-xs font-bold border border-rose-500/30 transition-colors"
+                  title="ลบห้องนี้ออกจากระบบ"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  <span className="hidden sm:inline">ลบห้องนี้</span>
                 </button>
               </div>
             </div>
@@ -1221,11 +1268,39 @@ export const AdminPage: React.FC = () => {
                       หากมีคนก่อกวนหรือเริ่มกิจกรรมรอบใหม่ สามารถสุ่มรหัสห้องใหม่ได้:
                     </span>
                     <button
+                      type="button"
                       onClick={handleRotateCode}
                       className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-jukebox-surface hover:bg-jukebox-hover text-xs font-bold text-accent-cyan border border-white/10 transition-colors"
                     >
                       <RotateCcw className="w-4 h-4" />
                       <span>สุ่มรหัสห้องใหม่ (Rotate Code)</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Danger Zone: Delete Room */}
+                <div className="glass-panel p-6 rounded-2xl border border-rose-500/30 bg-rose-950/20 flex flex-col gap-3">
+                  <div className="flex items-center gap-2 text-rose-400 font-bold text-sm">
+                    <Trash2 className="w-4 h-4" />
+                    <span>Danger Zone: ลบห้องนี้</span>
+                  </div>
+                  <p className="text-xs text-slate-300">
+                    การลบห้องจะนำห้องและคิวเพลงทั้งหมดออกจากระบบ ผู้ร่วมงานจะไม่สามารถเข้าห้องนี้ได้อีก
+                  </p>
+                  <div>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setRoomToDelete({
+                          id: roomDetail.room.id,
+                          name: roomDetail.room.name,
+                          code: roomDetail.room.code,
+                        })
+                      }
+                      className="px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold flex items-center gap-2 transition-colors shadow-lg shadow-rose-900/30"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      <span>ลบห้องนี้อย่างถาวร</span>
                     </button>
                   </div>
                 </div>
@@ -1349,6 +1424,50 @@ export const AdminPage: React.FC = () => {
                 className="px-5 py-2 rounded-xl bg-accent-rose text-white font-bold text-xs shadow-lg shadow-accent-rose/30 hover:bg-accent-rose/90 transition-all"
               >
                 ยืนยันล้างคิว
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Delete Room Confirm */}
+      {roomToDelete && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="glass-panel p-6 rounded-2xl w-full max-w-md border border-accent-rose/30 shadow-2xl text-center">
+            <div className="w-12 h-12 rounded-full bg-accent-rose/20 text-accent-rose flex items-center justify-center mx-auto mb-3">
+              <Trash2 className="w-6 h-6" />
+            </div>
+            <h3 className="text-base font-bold text-white mb-1">ยืนยันการลบห้อง?</h3>
+            <p className="text-xs text-slate-300 mb-6 leading-relaxed">
+              คุณต้องการลบห้อง <span className="font-bold text-white">&quot;{roomToDelete.name}&quot;</span> (รหัส <span className="font-mono text-accent-cyan font-bold">{roomToDelete.code}</span>) ใช่หรือไม่? ห้องและคิวเพลงทั้งหมดจะถูกนำออกจากระบบอย่างถาวร
+            </p>
+
+            <div className="flex items-center justify-center gap-3">
+              <button
+                type="button"
+                onClick={() => setRoomToDelete(null)}
+                disabled={isDeletingRoom}
+                className="px-4 py-2 rounded-xl text-xs text-slate-400 hover:text-white transition-colors"
+              >
+                ยกเลิก
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteRoom}
+                disabled={isDeletingRoom}
+                className="px-5 py-2 rounded-xl bg-accent-rose hover:bg-accent-rose/90 text-white font-bold text-xs shadow-lg shadow-accent-rose/30 transition-all flex items-center gap-2 disabled:opacity-50"
+              >
+                {isDeletingRoom ? (
+                  <>
+                    <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    <span>กำลังลบห้อง...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>ยืนยันลบห้อง</span>
+                  </>
+                )}
               </button>
             </div>
           </div>

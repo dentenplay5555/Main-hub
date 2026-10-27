@@ -132,6 +132,7 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>
           hostRef.current.appendChild(target);
 
           playerRef.current = new window.YT.Player(target, {
+            host: 'https://www.youtube-nocookie.com',
             height: '100%',
             width: '100%',
             playerVars: {
@@ -140,6 +141,7 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>
               rel: 0,
               modestbranding: 1,
               playsinline: 1,
+              iv_load_policy: 3,
               origin: window.location.origin,
             },
             events: {

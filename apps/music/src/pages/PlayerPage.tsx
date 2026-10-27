@@ -12,8 +12,9 @@ import {
   ListMusic,
   Radio,
   Wifi,
-  Sparkles,
   Volume2,
+  ShieldCheck,
+  Info,
 } from 'lucide-react';
 
 export const PlayerPage: React.FC = () => {
@@ -36,9 +37,10 @@ export const PlayerPage: React.FC = () => {
   const [snapshot, setSnapshot] = useState<QueueSnapshot | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [wsStatus, setWsStatus] = useState<'connecting' | 'connected' | 'disconnected'>('connecting');
+  const [showAdTips, setShowAdTips] = useState(false);
 
-  // Store playerState in a ref — so heartbeat always sends the latest value
-  // without adding it to useEffect dependency array (which caused WS reconnection storms).
+  // Store playerState in a ref so heartbeat always sends the latest value
+  // without adding it to useEffect dependency array.
   const playerStateRef = useRef<string>('Ready');
   const [playerStateDisplay, setPlayerStateDisplay] = useState<string>('Ready');
 
@@ -48,7 +50,6 @@ export const PlayerPage: React.FC = () => {
     if (!roomCode) return;
     try {
       const data = await api.getQueue(roomCode);
-      // Several events can trigger overlapping loads; never let an older response overwrite a newer one.
       setSnapshot((prev) =>
         prev && prev.room.id === data.room.id && data.queueVersion < prev.queueVersion ? prev : data
       );
@@ -87,15 +88,14 @@ export const PlayerPage: React.FC = () => {
     loadQueue();
     if (!roomCode) return;
 
-    // Initial heartbeat + periodic (every 15 s)
+    // Initial heartbeat and periodic (every 15s)
     api.sendPlayerHeartbeat(roomCode, playerStateRef.current).catch(() => {});
     const heartbeatTimer = setInterval(() => {
       api.sendPlayerHeartbeat(roomCode, playerStateRef.current).catch(() => {});
-      // Safety net in case a WebSocket event was missed (flaky Wi-Fi, reconnect gap)
       loadQueue();
     }, 15000);
 
-    // WebSocket — NOT in dependency array on playerState to avoid reconnect storm
+    // WebSocket connection
     const cleanup = connectRoomWebSocket(
       roomCode,
       (msg) => {
@@ -126,7 +126,7 @@ export const PlayerPage: React.FC = () => {
       clearInterval(heartbeatTimer);
       cleanup();
     };
-    // Intentionally omit playerStateRef from deps — it's a ref, not reactive state
+    // Intentionally omit playerStateRef from deps: it is a ref, not reactive state
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomCode]);
 
@@ -150,57 +150,88 @@ export const PlayerPage: React.FC = () => {
   const queue = snapshot?.queue || [];
 
   return (
-    <div className={`min-h-screen flex flex-col ${isFullscreen ? 'bg-black' : ''}`}>
+    <div className={`min-h-screen flex flex-col bg-slate-950 text-slate-100 ${isFullscreen ? 'bg-black' : ''}`}>
       {!isFullscreen && <Navbar roomCode={roomCode} roomName={room?.name} />}
 
       <main className="flex-1 max-w-7xl mx-auto w-full p-4 lg:p-6 flex flex-col lg:flex-row gap-6">
-        {/* Left Column: Player & Now Playing */}
+        {/* Left Column: Player and Now Playing */}
         <div className="flex-1 flex flex-col gap-4">
           {/* Top Bar */}
-          <div className="flex items-center justify-between glass-panel px-4 py-2.5 rounded-xl border border-white/10">
+          <div className="flex items-center justify-between bg-slate-900 border border-slate-800 px-4 py-2.5 rounded-xl">
             <div className="flex items-center gap-2.5">
               <span
-                className={`w-2.5 h-2.5 rounded-full animate-pulse ${
-                  wsStatus === 'connected' ? 'bg-accent-green' : 'bg-yellow-500'
+                className={`w-2.5 h-2.5 rounded-full ${
+                  wsStatus === 'connected' ? 'bg-emerald-400' : 'bg-amber-400'
                 }`}
               />
               <span className="font-bold text-sm text-white tracking-wide">
                 {room?.name || 'Classroom Player'}
               </span>
-              <span className="px-2 py-0.5 rounded bg-jukebox-surface text-slate-400 font-mono text-xs">
+              <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-300 font-mono text-xs">
                 {roomCode}
               </span>
-              <span className="text-[11px] text-slate-500 hidden sm:inline">
-                • {playerStateDisplay}
+              <span className="text-xs text-slate-400 hidden sm:inline">
+                : {playerStateDisplay}
               </span>
             </div>
 
             <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setShowAdTips(!showAdTips)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition-colors"
+                title="เคล็ดลับเล่นเพลงแบบไร้โฆษณา"
+              >
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                <span className="hidden sm:inline">ป้องกันโฆษณา</span>
+              </button>
+
               {/* Only show skip button if this browser has a player token */}
               {currentSong && canControl && (
                 <button
+                  type="button"
                   onClick={handleManualSkip}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-jukebox-surface hover:bg-jukebox-hover text-slate-300 hover:text-white text-xs transition-colors border border-white/10"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium transition-colors"
                   title="ข้ามเพลงนี้"
                 >
-                  <SkipForward className="w-3.5 h-3.5 text-accent-cyan" />
+                  <SkipForward className="w-3.5 h-3.5 text-amber-400" />
                   <span className="hidden sm:inline">ข้ามเพลง</span>
                 </button>
               )}
 
               <button
+                type="button"
                 onClick={toggleFullscreen}
-                className="p-2 rounded-lg bg-jukebox-surface hover:bg-jukebox-hover text-slate-300 hover:text-white transition-colors border border-white/10"
+                className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors"
                 title={isFullscreen ? 'ออกจากโหมดเต็มจอ' : 'แสดงเต็มจอ'}
+                aria-label={isFullscreen ? 'ออกจากโหมดเต็มจอ' : 'แสดงเต็มจอ'}
               >
                 {isFullscreen ? (
-                  <Minimize2 className="w-4 h-4 text-accent-purple" />
+                  <Minimize2 className="w-4 h-4 text-amber-400" />
                 ) : (
-                  <Maximize2 className="w-4 h-4 text-accent-purple" />
+                  <Maximize2 className="w-4 h-4 text-amber-400" />
                 )}
               </button>
             </div>
           </div>
+
+          {/* Ad Tips Info Box (Collapsible) */}
+          {showAdTips && (
+            <div className="p-3.5 rounded-xl bg-slate-900 border border-emerald-500/40 text-xs text-slate-300 flex items-start gap-2.5">
+              <Info className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="font-bold text-white mb-1">
+                  คำแนะนำสำหรับการเล่นเพลงบนเวทีหรือห้องเรียนโดยไม่มีโฆษณาแทรก:
+                </p>
+                <ul className="list-disc list-inside space-y-1 text-slate-300">
+                  <li>ระบบเปิดใช้งานโหมดความเป็นส่วนตัว (youtube-nocookie) เป็นค่าเริ่มต้นแล้ว</li>
+                  <li>ขอแนะนำให้เปิดหน้านี้ด้วยเบราว์เซอร์ที่มีตัวบล็อกโฆษณาในตัว เช่น Brave Browser</li>
+                  <li>หรือติดตั้งส่วนขยาย uBlock Origin บน Chrome / Edge จะป้องกันโฆษณาวิดีโอได้ 100%</li>
+                  <li>เลือกเพลงจากแท็บ &quot;คลังเพลงค้นหาง่าย&quot; ในหน้าขอเพลง ซึ่งเป็นเพลงที่ผ่านการคัดสรรแล้ว</li>
+                </ul>
+              </div>
+            </div>
+          )}
 
           {/* YouTube Player */}
           <div className="w-full">
@@ -215,18 +246,17 @@ export const PlayerPage: React.FC = () => {
 
           {/* Now Playing Details Bar */}
           {currentSong ? (
-            <div className="glass-panel p-4 rounded-2xl border border-accent-purple/30 bg-gradient-to-r from-accent-purple/15 via-jukebox-surface/60 to-transparent flex items-center justify-between gap-4">
+            <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-between gap-4">
               <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2 text-xs font-bold text-accent-cyan tracking-wider uppercase mb-1">
+                <div className="flex items-center gap-2 text-xs font-bold text-amber-400 tracking-wider uppercase mb-1">
                   <Volume2 className="w-4 h-4 animate-pulse" />
                   <span>กำลังเล่น (Now Playing)</span>
                 </div>
-                <h2 className="text-base sm:text-xl font-extrabold text-white truncate">
-                  {currentSong.title || `YouTube Video (${currentSong.video_id})`}
+                <h2 className="text-base sm:text-xl font-bold text-white truncate">
+                  {currentSong.title || `วิดีโอ (${currentSong.video_id})`}
                 </h2>
-                <p className="text-xs text-slate-400 mt-1 flex items-center gap-1.5">
-                  <Sparkles className="w-3.5 h-3.5 text-accent-purple" />
-                  <span>เพลงที่ส่งเข้าคิวแบบไม่ระบุตัวตน</span>
+                <p className="text-xs text-slate-400 mt-1">
+                  เพลงที่ส่งเข้าคิวในห้องนี้
                 </p>
               </div>
 
@@ -234,29 +264,29 @@ export const PlayerPage: React.FC = () => {
                 <span className="text-[10px] text-slate-500 uppercase tracking-widest font-mono">
                   VIDEO ID
                 </span>
-                <span className="text-xs font-mono text-slate-300 bg-black/40 px-2 py-1 rounded border border-white/10">
+                <span className="text-xs font-mono text-slate-300 bg-slate-950 px-2 py-1 rounded border border-slate-800">
                   {currentSong.video_id}
                 </span>
               </div>
             </div>
           ) : (
-            <div className="glass-panel p-4 rounded-2xl border border-white/10 text-center text-sm text-slate-400">
-              ไม่มีเพลงที่กำลังเล่นอยู่ ส่งเพลงผ่าน QR Code ได้ทันที
+            <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800 text-center text-sm text-slate-400">
+              ไม่มีเพลงที่กำลังเล่นอยู่ สแกน QR Code เพื่อส่งเพลงได้ทันที
             </div>
           )}
         </div>
 
-        {/* Right Column: QR Code & Up Next Queue */}
+        {/* Right Column: QR Code and Up Next Queue */}
         <div className="w-full lg:w-96 flex flex-col gap-5">
           {/* QR Code Card */}
-          <div className="glass-panel p-6 rounded-2xl border border-white/15 shadow-2xl flex flex-col items-center text-center">
-            <div className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest text-accent-cyan mb-2">
+          <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl flex flex-col items-center text-center">
+            <div className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-amber-400 mb-2">
               <Radio className="w-3.5 h-3.5" />
               <span>SCAN TO REQUEST</span>
             </div>
-            <h3 className="text-lg font-bold text-white mb-1">สแกนเพื่อส่งเพลงเข้าคิว</h3>
+            <h3 className="text-base font-bold text-white mb-1">สแกนเพื่อส่งเพลงเข้าคิว</h3>
             <p className="text-xs text-slate-400 mb-4 max-w-xs">
-              เปิดกล้องมือถือสแกน QR Code แล้ววางลิงก์ YouTube ได้ทันที
+              เปิดกล้องมือถือสแกนเพื่อค้นหาเพลงในคลังและส่งเข้าคิวได้ทันที
             </p>
 
             {roomCode && (
@@ -270,13 +300,13 @@ export const PlayerPage: React.FC = () => {
           </div>
 
           {/* Up Next List */}
-          <div className="glass-panel p-5 rounded-2xl border border-white/10 flex-1 flex flex-col">
+          <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 flex-1 flex flex-col">
             <div className="flex items-center justify-between mb-3.5">
               <div className="flex items-center gap-2">
-                <ListMusic className="w-4 h-4 text-accent-purple" />
+                <ListMusic className="w-4 h-4 text-amber-400" />
                 <h4 className="font-bold text-sm text-white">เพลงถัดไป (Up Next)</h4>
               </div>
-              <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-jukebox-surface text-slate-400">
+              <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-slate-800 text-slate-300">
                 {queue.length} เพลง
               </span>
             </div>
@@ -286,19 +316,19 @@ export const PlayerPage: React.FC = () => {
                 queue.map((song: Song, index: number) => (
                   <div
                     key={song.id}
-                    className="glass-card p-2.5 rounded-xl flex items-center gap-3 border border-white/5 hover:border-white/15 transition-colors"
+                    className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 flex items-center gap-3"
                   >
-                    <span className="font-mono text-xs font-bold text-slate-500 w-5 text-center">
+                    <span className="font-mono text-xs font-bold text-slate-400 w-5 text-center">
                       {String(index + 1).padStart(2, '0')}
                     </span>
                     <img
                       src={`https://img.youtube.com/vi/${song.video_id}/default.jpg`}
-                      alt="thumbnail"
-                      className="w-12 h-9 rounded object-cover border border-white/10 shrink-0"
+                      alt="ภาพปกเพลง"
+                      className="w-12 h-9 rounded object-cover border border-slate-800 shrink-0 bg-slate-900"
                     />
                     <div className="min-w-0 flex-1">
                       <p className="text-xs font-medium text-slate-200 truncate">
-                        {song.title || `YouTube Video (${song.video_id})`}
+                        {song.title || `วิดีโอ (${song.video_id})`}
                       </p>
                       <span className="text-[10px] text-slate-500 font-mono">
                         {song.video_id}
@@ -307,9 +337,9 @@ export const PlayerPage: React.FC = () => {
                   </div>
                 ))
               ) : (
-                <div className="h-full flex flex-col items-center justify-center text-center p-6 text-xs text-slate-500">
+                <div className="h-full flex flex-col items-center justify-center text-center p-6 text-xs text-slate-400">
                   <span>ยังไม่มีเพลงในคิวถัดไป</span>
-                  <span className="text-[11px] text-slate-600 mt-1">
+                  <span className="text-[11px] text-slate-500 mt-1">
                     สแกน QR Code ด้านบนเพื่อส่งเพลงคนแรก
                   </span>
                 </div>
@@ -321,3 +351,5 @@ export const PlayerPage: React.FC = () => {
     </div>
   );
 };
+
+export default PlayerPage;

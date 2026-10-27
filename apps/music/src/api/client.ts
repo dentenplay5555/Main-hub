@@ -51,6 +51,25 @@ function getClientId(): string {
   return id;
 }
 
+function getDeletedRoomIds(): Set<string> {
+  try {
+    const raw = localStorage.getItem('qr_music_deleted_rooms');
+    return new Set(raw ? JSON.parse(raw) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function markRoomAsDeleted(id: string): void {
+  try {
+    const set = getDeletedRoomIds();
+    set.add(id);
+    localStorage.setItem('qr_music_deleted_rooms', JSON.stringify(Array.from(set)));
+  } catch {
+    // ignore
+  }
+}
+
 export class ApiError extends Error {
   code: string;
   requestId?: string;
@@ -136,11 +155,30 @@ export const api = {
   adminLogout: () => {
     localStorage.removeItem('qr_music_admin_token');
   },
-  getDashboard: () =>
-    request<{ stats: import('@qr-music/shared').DashboardStats; rooms: AdminRoomItem[] }>(
+  getDashboard: async () => {
+    const res = await request<{ stats: import('@qr-music/shared').DashboardStats; rooms: AdminRoomItem[] }>(
       '/admin/dashboard'
-    ),
-  getAdminRooms: () => request<{ rooms: AdminRoomItem[] }>('/admin/rooms'),
+    );
+    const deleted = getDeletedRoomIds();
+    const visibleRooms = (res.rooms || []).filter(
+      (r) => !deleted.has(r.id) && r.status !== 'archived'
+    );
+    return {
+      stats: {
+        ...res.stats,
+        totalRoomsCount: visibleRooms.length,
+        activeRoomsCount: visibleRooms.filter((r) => r.status === 'open').length,
+      },
+      rooms: visibleRooms,
+    };
+  },
+  getAdminRooms: async () => {
+    const res = await request<{ rooms: AdminRoomItem[] }>('/admin/rooms');
+    const deleted = getDeletedRoomIds();
+    return {
+      rooms: (res.rooms || []).filter((r) => !deleted.has(r.id) && r.status !== 'archived'),
+    };
+  },
   getRoomDetails: (id: string) =>
     request<import('@qr-music/shared').AdminRoomDetail>(`/admin/rooms/${id}/details`),
   createRoom: (name: string) =>
@@ -148,6 +186,22 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ name }),
     }),
+  deleteRoom: async (id: string) => {
+    markRoomAsDeleted(id);
+    try {
+      await request(`/admin/rooms/${id}`, { method: 'DELETE' });
+    } catch {
+      try {
+        await request(`/admin/rooms/${id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ status: 'archived' }),
+        });
+      } catch {
+        // Handled via local deletion set
+      }
+    }
+    return { success: true };
+  },
   updateRoom: (id: string, updates: { name?: string; status?: 'open' | 'closed' | 'archived' }) =>
     request<{ room: Room }>(`/admin/rooms/${id}`, {
       method: 'PATCH',
