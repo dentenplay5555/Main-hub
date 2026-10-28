@@ -211,7 +211,7 @@ adminRoutes.get('/rooms/:id/details', async (c) => {
   const requestId = c.get('requestId');
 
   try {
-    const detail = await getRoomFullDetails(c.env.DB, id, c.env.PUBLIC_URL);
+    const detail = await getRoomFullDetails(c.env.DB, id, c.env.PUBLIC_URL, Boolean(c.env.YOUTUBE_API_KEY));
     return c.json({
       ok: true,
       data: detail,
@@ -269,6 +269,7 @@ adminRoutes.post('/rooms', async (c) => {
     maxQueue: 100,
     allowDuplicates: false,
     cooldownSeconds: 5,
+    autoplay: false,
   };
 
   await c.env.DB.prepare(`

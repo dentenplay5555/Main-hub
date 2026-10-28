@@ -11,6 +11,7 @@ import {
   RATE_LIMITS,
 } from '@qr-music/shared';
 import { sha256, generateSecureToken } from './crypto';
+import { findAutoplayVideo } from './youtube';
 
 // Retry helper for concurrent database transaction conflicts
 async function withRetry<T>(fn: () => Promise<T>, maxRetries = 3): Promise<T> {
@@ -41,16 +42,17 @@ async function withRetry<T>(fn: () => Promise<T>, maxRetries = 3): Promise<T> {
 export function parseRoomSettings(settingsJson?: string): RoomSettings {
   try {
     if (!settingsJson) {
-      return { maxQueue: 100, allowDuplicates: false, cooldownSeconds: 5 };
+      return { maxQueue: 100, allowDuplicates: false, cooldownSeconds: 5, autoplay: false };
     }
     const parsed = JSON.parse(settingsJson);
     return {
       maxQueue: typeof parsed.maxQueue === 'number' && parsed.maxQueue > 0 ? parsed.maxQueue : 100,
       allowDuplicates: Boolean(parsed.allowDuplicates),
       cooldownSeconds: typeof parsed.cooldownSeconds === 'number' && parsed.cooldownSeconds >= 0 ? parsed.cooldownSeconds : 5,
+      autoplay: parsed.autoplay === true,
     };
   } catch {
-    return { maxQueue: 100, allowDuplicates: false, cooldownSeconds: 5 };
+    return { maxQueue: 100, allowDuplicates: false, cooldownSeconds: 5, autoplay: false };
   }
 }
 
@@ -110,10 +112,14 @@ export async function ensurePlayerToken(db: Env['DB'], room: Room, attempt = 0):
   return token;
 }
 
+// Songs picked by Autoplay are stored with this marker in request_token_hash. It can never equal
+// a real value, because real values are SHA-256 hex digests. This avoids a schema migration.
+const AUTOPLAY_MARKER = 'autoplay';
+
 // Strip internal security token hashes from public song response
 function sanitizeSong(s: Song): Song {
   const { request_token_hash, ...rest } = s;
-  return rest;
+  return request_token_hash === AUTOPLAY_MARKER ? { ...rest, autoplay: true } : rest;
 }
 
 // Helper to broadcast event to a room's Durable Object
@@ -484,12 +490,142 @@ export async function advanceQueue(
       });
     }
 
+    // Queue ran dry: with Autoplay on, find a related song instead of going silent.
+    let nextSong = updatedNextSong ? sanitizeSong(updatedNextSong) : null;
+    let queueVersion = nextVersion;
+    if (!updatedNextSong) {
+      const filled = await fillFromAutoplay(env, roomId);
+      if (filled) {
+        nextSong = filled.song;
+        queueVersion = filled.queueVersion;
+      }
+    }
+
     return {
       previousSong: currentPlaying ? sanitizeSong(currentPlaying) : null,
-      nextSong: updatedNextSong ? sanitizeSong(updatedNextSong) : null,
-      queueVersion: nextVersion,
+      nextSong,
+      queueVersion,
     };
   });
+}
+
+async function logRoomEvent(
+  db: Env['DB'],
+  roomId: string,
+  eventType: string,
+  payload: Record<string, unknown>
+): Promise<number> {
+  const now = new Date().toISOString();
+  // room_events has UNIQUE(room_id, version), so every logged event bumps the version first.
+  await db.batch([
+    db.prepare('UPDATE rooms SET queue_version = queue_version + 1, updated_at = ? WHERE id = ?').bind(now, roomId),
+    db
+      .prepare(
+        `INSERT INTO room_events (room_id, version, event_type, payload_json, created_at)
+         SELECT id, queue_version, ?, ?, ? FROM rooms WHERE id = ?`
+      )
+      .bind(eventType, JSON.stringify(payload), now, roomId),
+  ]);
+  const row = await db.prepare('SELECT queue_version FROM rooms WHERE id = ?').bind(roomId).first<{ queue_version: number }>();
+  return row?.queue_version ?? 0;
+}
+
+// Starts one Autoplay song when the room is idle (nothing playing, nothing queued), Autoplay is on
+// and the room has a song to base the search on. Never throws: a failed search leaves the room idle
+// and writes an 'autoplay.failed' event that shows up in the admin event log.
+export async function fillFromAutoplay(
+  env: Env,
+  roomId: string
+): Promise<{ song: Song; queueVersion: number } | null> {
+  try {
+    const db = env.DB;
+    const room = await getRoomById(db, roomId);
+    if (!room || room.status === 'archived') return null;
+    if (!parseRoomSettings(room.settings_json).autoplay) return null;
+
+    const busy = await db
+      .prepare("SELECT 1 AS x FROM songs WHERE room_id = ? AND status IN ('playing', 'queued') LIMIT 1")
+      .bind(room.id)
+      .first();
+    if (busy) return null;
+
+    // Seed: the song that finished most recently (a skipped song only counts when nothing was played).
+    const seed = await db
+      .prepare(
+        `SELECT title FROM songs
+         WHERE room_id = ? AND title IS NOT NULL AND status IN ('played', 'skipped')
+         ORDER BY CASE status WHEN 'played' THEN 0 ELSE 1 END, COALESCE(finished_at, created_at) DESC
+         LIMIT 1`
+      )
+      .bind(room.id)
+      .first<{ title: string }>();
+    if (!seed?.title) return null;
+
+    const recent = await db
+      .prepare('SELECT video_id FROM songs WHERE room_id = ? ORDER BY created_at DESC LIMIT 50')
+      .bind(room.id)
+      .all<{ video_id: string }>();
+    const exclude = new Set((recent.results ?? []).map((r) => r.video_id));
+
+    const found = await findAutoplayVideo(env.YOUTUBE_API_KEY, seed.title, exclude, env.YOUTUBE_API_BASE || undefined);
+    if (!found.ok) {
+      await logRoomEvent(db, room.id, 'autoplay.failed', { reason: found.reason, seed: seed.title });
+      return null;
+    }
+
+    const now = new Date().toISOString();
+    const songId = crypto.randomUUID();
+    // Guarded insert: if a listener added a song while we were searching, their song already
+    // started and this inserts nothing.
+    const res = await db
+      .prepare(
+        `INSERT INTO songs (id, room_id, video_id, title, status, position, request_token_hash, created_at, started_at)
+         SELECT ?, ?, ?, ?, 'playing', 0, ?, ?, ?
+         WHERE NOT EXISTS (SELECT 1 FROM songs WHERE room_id = ? AND status IN ('playing', 'queued'))`
+      )
+      .bind(songId, room.id, found.videoId, found.title, AUTOPLAY_MARKER, now, now, room.id)
+      .run();
+    if ((res.meta?.changes ?? 0) === 0) return null;
+
+    const version = await logRoomEvent(db, room.id, 'autoplay.started', {
+      songId,
+      videoId: found.videoId,
+      title: found.title,
+      seed: seed.title,
+    });
+
+    const song = sanitizeSong({
+      id: songId,
+      room_id: room.id,
+      video_id: found.videoId,
+      title: found.title,
+      status: 'playing',
+      position: 0,
+      request_token_hash: AUTOPLAY_MARKER,
+      created_at: now,
+      started_at: now,
+    });
+
+    await broadcastToRoom(env, room.code, {
+      type: 'song.started',
+      roomCode: room.code,
+      version,
+      payload: { song, queueVersion: version },
+    });
+    const snapshot = await getQueueSnapshot(db, room.code);
+    if (snapshot) {
+      await broadcastToRoom(env, room.code, {
+        type: 'queue.updated',
+        roomCode: room.code,
+        version,
+        payload: { playing: snapshot.playing, queue: snapshot.queue },
+      });
+    }
+    return { song, queueVersion: version };
+  } catch (err) {
+    console.error('Autoplay failed:', err);
+    return null;
+  }
 }
 
 export async function reorderSong(
@@ -690,6 +826,19 @@ export async function updateRoomSettings(
     updated.allowDuplicates = Boolean(newSettings.allowDuplicates);
   }
 
+  const turnedOnAutoplay = newSettings.autoplay === true && !current.autoplay;
+  if (newSettings.autoplay !== undefined) {
+    if (typeof newSettings.autoplay !== 'boolean') {
+      throw new Error('INVALID_SETTINGS: autoplay ต้องเป็น true หรือ false');
+    }
+    if (newSettings.autoplay && !env.YOUTUBE_API_KEY) {
+      throw new Error(
+        'AUTOPLAY_UNAVAILABLE: เซิร์ฟเวอร์ยังไม่มี YOUTUBE_API_KEY จึงเปิด Autoplay ไม่ได้ (ดูวิธีตั้งค่าใน README)'
+      );
+    }
+    updated.autoplay = newSettings.autoplay;
+  }
+
   // Preserve playerToken if present in existing settings_json
   let existingSettingsObj: any = {};
   try {
@@ -712,6 +861,11 @@ export async function updateRoomSettings(
     version: room.queue_version,
     payload: { room: sanitizeRoom({ ...room, settings_json: jsonStr, updated_at: now }) },
   });
+
+  // Switching Autoplay on in an idle room starts a song right away instead of waiting for the next advance.
+  if (turnedOnAutoplay) {
+    await fillFromAutoplay(env, roomId);
+  }
 
   return updated;
 }
@@ -802,7 +956,8 @@ export async function getDashboardStats(db: Env['DB']): Promise<DashboardStats> 
 export async function getRoomFullDetails(
   db: Env['DB'],
   roomId: string,
-  publicUrl?: string
+  publicUrl?: string,
+  autoplayAvailable = false
 ): Promise<AdminRoomDetail> {
   const room = await getRoomById(db, roomId);
   if (!room) throw new Error('ROOM_NOT_FOUND');
@@ -846,6 +1001,7 @@ export async function getRoomFullDetails(
     room: sanitizeRoom(room),
     playerToken,
     settings,
+    autoplayAvailable,
     playing: playing ? sanitizeSong(playing) : null,
     queue: (queue.results ?? []).map(sanitizeSong),
     history: (history.results ?? []).map(sanitizeSong),

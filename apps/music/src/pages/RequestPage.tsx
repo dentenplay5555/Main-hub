@@ -458,7 +458,7 @@ export const RequestPage: React.FC = () => {
                 </h4>
                 <p className="text-xs text-slate-400 flex items-center gap-1 mt-0.5">
                   <Music className="w-3 h-3 text-slate-400" />
-                  <span>ขอเพลงโดยผู้ร่วมงานในห้อง</span>
+                  <span>{snapshot.playing.autoplay ? 'เลือกโดย Autoplay' : 'ขอเพลงโดยผู้ร่วมงานในห้อง'}</span>
                 </p>
               </div>
             </div>

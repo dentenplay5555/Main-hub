@@ -256,7 +256,7 @@ export const PlayerPage: React.FC = () => {
                   {currentSong.title || `วิดีโอ (${currentSong.video_id})`}
                 </h2>
                 <p className="text-xs text-slate-400 mt-1">
-                  เพลงที่ส่งเข้าคิวในห้องนี้
+                  {currentSong.autoplay ? 'เลือกโดย Autoplay จากเพลงก่อนหน้า' : 'เพลงที่ส่งเข้าคิวในห้องนี้'}
                 </p>
               </div>
 

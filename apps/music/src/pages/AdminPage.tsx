@@ -70,8 +70,11 @@ export const AdminPage: React.FC = () => {
     maxQueue: 100,
     allowDuplicates: false,
     cooldownSeconds: 5,
+    autoplay: false,
   });
   const [editRoomName, setEditRoomName] = useState('');
+  const [autoplayBusy, setAutoplayBusy] = useState(false);
+  const [autoplayError, setAutoplayError] = useState<string | null>(null);
 
   const showToast = (msg: string) => {
     setActionSuccess(msg);
@@ -240,6 +243,26 @@ export const AdminPage: React.FC = () => {
       loadDashboard();
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  // The Autoplay switch saves on its own: a switch that waits for a separate Save button looks broken.
+  const handleToggleAutoplay = async () => {
+    if (!roomDetail || autoplayBusy) return;
+    const next = !settingsForm.autoplay;
+    setAutoplayBusy(true);
+    setAutoplayError(null);
+    try {
+      const res = await api.updateRoomSettings(roomDetail.room.id, { autoplay: next });
+      setSettingsForm((f) => ({ ...f, autoplay: res.settings.autoplay }));
+      setRoomDetail((d) => (d ? { ...d, settings: res.settings } : d));
+      showToast(next ? 'เปิด Autoplay แล้ว' : 'ปิด Autoplay แล้ว');
+      // Turning it on in an idle room can start a song, so pick up the new state without the full-page loader.
+      api.getRoomDetails(roomDetail.room.id).then(setRoomDetail).catch(() => {});
+    } catch (err) {
+      setAutoplayError(err instanceof Error ? err.message : 'เปลี่ยนการตั้งค่า Autoplay ไม่สำเร็จ');
+    } finally {
+      setAutoplayBusy(false);
     }
   };
 
@@ -752,7 +775,7 @@ export const AdminPage: React.FC = () => {
             </div>
 
             {/* 4 Tabs Navigation */}
-            <div className="flex items-center gap-2 border-b border-white/10 pb-1">
+            <div className="flex items-center gap-2 border-b border-white/10 pb-1 overflow-x-auto [&>button]:shrink-0">
               <button
                 onClick={() => setActiveTab('queue')}
                 className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${
@@ -837,6 +860,11 @@ export const AdminPage: React.FC = () => {
                           <span className="text-xs text-slate-400 font-mono">
                             Video ID: {roomDetail.playing.video_id}
                           </span>
+                          {roomDetail.playing.autoplay && (
+                            <span className="ml-2 text-[10px] font-bold text-accent-purple border border-accent-purple/40 rounded px-1.5 py-0.5">
+                              เลือกโดย Autoplay
+                            </span>
+                          )}
                         </div>
                       </>
                     ) : (
@@ -1214,6 +1242,56 @@ export const AdminPage: React.FC = () => {
                     <span className="text-[11px] text-slate-500 mt-1 block">
                       ผู้ส่งเดิมต้องรอตามเวลานี้ก่อนส่งเพลงถัดไป
                     </span>
+                  </div>
+
+                  {/* Autoplay */}
+                  <div className="p-3.5 rounded-xl bg-black/30 border border-white/5">
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="min-w-0">
+                        <span id="autoplay-label" className="text-xs font-bold text-white block">
+                          Autoplay
+                        </span>
+                        <span id="autoplay-desc" className="text-[11px] text-slate-400 block mt-0.5">
+                          {!roomDetail.autoplayAvailable
+                            ? 'ใช้ไม่ได้: เซิร์ฟเวอร์ยังไม่มี YOUTUBE_API_KEY'
+                            : settingsForm.autoplay
+                              ? 'เปิดอยู่ เมื่อคิวหมด ระบบจะค้นเพลงใกล้เคียงกับเพลงที่เพิ่งเล่นจบจาก YouTube แล้วเล่นต่อ'
+                              : 'ปิดอยู่ เมื่อคิวหมด เพลงจะหยุดจนกว่าจะมีคนส่งเพลงใหม่'}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={settingsForm.autoplay}
+                        aria-labelledby="autoplay-label"
+                        aria-describedby="autoplay-desc"
+                        disabled={!roomDetail.autoplayAvailable && !settingsForm.autoplay}
+                        aria-busy={autoplayBusy}
+                        onClick={handleToggleAutoplay}
+                        className={`relative shrink-0 w-12 h-7 rounded-full border transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-cyan focus-visible:ring-offset-2 focus-visible:ring-offset-black disabled:opacity-50 disabled:cursor-not-allowed aria-busy:opacity-60 ${
+                          settingsForm.autoplay
+                            ? 'bg-accent-purple border-accent-purple'
+                            : 'bg-slate-700 border-white/10'
+                        }`}
+                      >
+                        <span
+                          aria-hidden="true"
+                          className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform ${
+                            settingsForm.autoplay ? 'translate-x-5' : ''
+                          }`}
+                        />
+                      </button>
+                    </div>
+                    {settingsForm.autoplay && roomDetail.history.length === 0 && !roomDetail.playing && (
+                      <p className="text-[11px] text-amber-300 mt-2">
+                        ยังไม่มีเพลงให้ใช้ค้น ส่งเพลงแรกและรอให้เล่นจบก่อน Autoplay จึงเริ่มทำงาน
+                      </p>
+                    )}
+                    {autoplayError && (
+                      <p role="alert" className="text-[11px] text-rose-400 mt-2">
+                        {autoplayError}
+                      </p>
+                    )}
                   </div>
 
                   {/* Allow Duplicates */}

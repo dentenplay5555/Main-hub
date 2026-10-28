@@ -48,3 +48,94 @@ export async function fetchYouTubeTitle(videoId: string): Promise<string | null>
     return null;
   }
 }
+
+export type AutoplayResult =
+  | { ok: true; videoId: string; title: string }
+  | { ok: false; reason: 'no_key' | 'no_result' | 'quota' | 'error' };
+
+const MAX_AUTOPLAY_SECONDS = 10 * 60;
+
+// "PT3M25S" -> 205
+function isoDurationToSeconds(iso: string): number {
+  const m = iso.match(/^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$/);
+  if (!m) return Infinity;
+  return Number(m[1] ?? 0) * 3600 + Number(m[2] ?? 0) * 60 + Number(m[3] ?? 0);
+}
+
+// Drops "(Official Video)", "[MV]", "| Lyrics" and similar noise so the search matches the song, not the upload.
+export function cleanTitleForSearch(title: string): string {
+  return title
+    .replace(/[\(\[【][^\)\]】]*(official|mv|m\/v|lyric|video|audio|hd|4k)[^\)\]】]*[\)\]】]/gi, ' ')
+    .replace(/\|.*$/, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 100);
+}
+
+// Finds one embeddable, school-safe, reasonably short video related to `seedTitle`.
+// Costs about 101 quota units per call (search 100 + videos 1), so the default
+// 10,000 units/day allow roughly 100 lookups.
+export async function findAutoplayVideo(
+  apiKey: string | undefined,
+  seedTitle: string,
+  excludeVideoIds: Set<string>,
+  apiBase = 'https://www.googleapis.com/youtube/v3'
+): Promise<AutoplayResult> {
+  if (!apiKey) return { ok: false, reason: 'no_key' };
+  const query = cleanTitleForSearch(seedTitle);
+  if (!query) return { ok: false, reason: 'no_result' };
+
+  try {
+    const searchParams = new URLSearchParams({
+      part: 'snippet',
+      type: 'video',
+      q: query,
+      maxResults: '15',
+      videoEmbeddable: 'true',
+      videoSyndicated: 'true',
+      videoCategoryId: '10', // Music
+      safeSearch: 'strict',
+      key: apiKey,
+    });
+    const searchRes = await fetch(`${apiBase}/search?${searchParams}`, {
+      signal: AbortSignal.timeout(5000),
+    });
+    if (searchRes.status === 403 || searchRes.status === 429) return { ok: false, reason: 'quota' };
+    if (!searchRes.ok) return { ok: false, reason: 'error' };
+
+    const searchData = (await searchRes.json()) as {
+      items?: { id?: { videoId?: string }; snippet?: { title?: string } }[];
+    };
+    const candidates = (searchData.items ?? [])
+      .map((i) => ({ id: i.id?.videoId ?? '', title: i.snippet?.title ?? '' }))
+      .filter((c) => /^[A-Za-z0-9_-]{11}$/.test(c.id) && !excludeVideoIds.has(c.id));
+    if (candidates.length === 0) return { ok: false, reason: 'no_result' };
+
+    const detailParams = new URLSearchParams({
+      part: 'contentDetails,status',
+      id: candidates.map((c) => c.id).join(','),
+      key: apiKey,
+    });
+    const detailRes = await fetch(`${apiBase}/videos?${detailParams}`, {
+      signal: AbortSignal.timeout(5000),
+    });
+    if (detailRes.status === 403 || detailRes.status === 429) return { ok: false, reason: 'quota' };
+    if (!detailRes.ok) return { ok: false, reason: 'error' };
+
+    const detailData = (await detailRes.json()) as {
+      items?: { id: string; contentDetails?: { duration?: string }; status?: { embeddable?: boolean } }[];
+    };
+    const usable = new Map<string, boolean>();
+    for (const v of detailData.items ?? []) {
+      const seconds = isoDurationToSeconds(v.contentDetails?.duration ?? '');
+      usable.set(v.id, v.status?.embeddable === true && seconds >= 30 && seconds <= MAX_AUTOPLAY_SECONDS);
+    }
+
+    // Search results come back in relevance order, so the first usable one is the closest match.
+    const pick = candidates.find((c) => usable.get(c.id));
+    if (!pick) return { ok: false, reason: 'no_result' };
+    return { ok: true, videoId: pick.id, title: pick.title.trim() || pick.id };
+  } catch {
+    return { ok: false, reason: 'error' };
+  }
+}

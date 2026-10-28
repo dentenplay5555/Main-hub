@@ -1,3 +1,5 @@
 # Copy to .dev.vars (git-ignored) for `npm run dev -w services/music-api`.
 # Choose your own password; there is no built-in default.
 ADMIN_PASSWORD=change-me
+# Optional: YouTube Data API v3 key. Needed only for the Autoplay switch.
+# YOUTUBE_API_KEY=

@@ -12,6 +12,8 @@ export interface RoomSettings {
   maxQueue: number;
   allowDuplicates: boolean;
   cooldownSeconds: number;
+  /** When the queue runs out, find a related song on YouTube and play it. */
+  autoplay: boolean;
 }
 
 export interface Room {
@@ -36,6 +38,8 @@ export interface Song {
   created_at: string;
   started_at?: string | null;
   finished_at?: string | null;
+  /** True when Autoplay picked this song instead of a listener. */
+  autoplay?: boolean;
 }
 
 export interface QueueSnapshot {
@@ -122,6 +126,8 @@ export interface AdminRoomDetail {
   /** Secret that lets a browser control this room's player. Only ever sent to admins. */
   playerToken?: string;
   settings: RoomSettings;
+  /** False when the server has no YOUTUBE_API_KEY, so Autoplay cannot search. */
+  autoplayAvailable: boolean;
   playing: Song | null;
   queue: Song[];
   history: Song[];
