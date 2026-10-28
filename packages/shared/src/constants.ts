@@ -2,6 +2,7 @@ export const YOUTUBE_HOSTS = new Set([
   'www.youtube.com',
   'youtube.com',
   'm.youtube.com',
+  'music.youtube.com',
   'youtu.be',
 ]);
 
