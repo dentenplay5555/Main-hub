@@ -8,6 +8,8 @@ export interface Env {
   YOUTUBE_API_KEY?: string;
   /** Test hook: replaces https://www.googleapis.com/youtube/v3 so tests can use a fake. */
   YOUTUBE_API_BASE?: string;
+  /** Test hook: replaces https://lrclib.net/api so tests can use a fake. */
+  LYRICS_API_BASE?: string;
   PUBLIC_URL?: string;
   ALLOWED_ORIGINS?: string;
 }

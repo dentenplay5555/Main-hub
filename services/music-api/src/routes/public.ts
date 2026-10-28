@@ -9,7 +9,8 @@ import {
   recordPlayerHeartbeat,
 } from '../services/queueService';
 import { extractVideoId, fetchYouTubeTitle } from '../services/youtube';
-import { AddSongRequest } from '@qr-music/shared';
+import { findLyrics } from '../services/lyrics';
+import { AddSongRequest, LyricsResponse } from '@qr-music/shared';
 import { playerAuthMiddleware } from '../middleware/auth';
 
 export const publicRoutes = new Hono<{ Bindings: Env; Variables: AppVariables }>();
@@ -185,6 +186,51 @@ publicRoutes.get('/rooms/:code/events', async (c) => {
     },
     requestId,
   });
+});
+
+// 4.1 Lyrics for one song of the room. The title comes from our own database, never from the client,
+//     so this cannot be used as an open proxy to LRCLIB. Results are cached at the edge, not stored.
+publicRoutes.get('/rooms/:code/songs/:songId/lyrics', async (c) => {
+  const requestId = c.get('requestId');
+  const room = await getRoomByCode(c.env.DB, c.req.param('code'));
+  if (!room) {
+    return c.json({ ok: false, error: { code: 'ROOM_NOT_FOUND', message: 'ไม่พบห้องที่ระบุ' }, requestId }, 404);
+  }
+  const song = await c.env.DB
+    .prepare('SELECT video_id, title FROM songs WHERE id = ? AND room_id = ?')
+    .bind(c.req.param('songId'), room.id)
+    .first<{ video_id: string; title: string | null }>();
+  if (!song) {
+    return c.json({ ok: false, error: { code: 'SONG_NOT_FOUND', message: 'ไม่พบเพลงนี้ในห้อง' }, requestId }, 404);
+  }
+  if (!song.title) {
+    return c.json({ ok: true, data: { found: false, reason: 'no_title' }, requestId });
+  }
+
+  // Cache by video id: the same song is requested in many rooms and replayed often.
+  const cache = (globalThis as unknown as { caches?: { default: Cache } }).caches?.default;
+  const cacheKey = new Request(`https://lyrics.cache.invalid/${song.video_id}`);
+  try {
+    const hit = await cache?.match(cacheKey);
+    if (hit) {
+      const cached = (await hit.json()) as LyricsResponse;
+      return c.json({ ok: true, data: cached, requestId });
+    }
+  } catch {
+    // cache unavailable: fall through to a live lookup
+  }
+
+  const data = await findLyrics(song.title, c.env.LYRICS_API_BASE || undefined);
+  // Do not cache upstream failures for long; real "not found" answers can wait an hour, hits a day.
+  const ttl = data.found ? 86400 : data.reason === 'unavailable' ? 0 : 3600;
+  if (cache && ttl > 0) {
+    try {
+      await cache.put(cacheKey, new Response(JSON.stringify(data), { headers: { 'Content-Type': 'application/json', 'Cache-Control': `max-age=${ttl}` } }));
+    } catch {
+      // best effort
+    }
+  }
+  return c.json({ ok: true, data, requestId });
 });
 
 // 5. Player reports song ended / requests next song

@@ -144,3 +144,22 @@ export interface ReorderSongRequest {
 export interface PlayerCommandRequest {
   command: 'pause' | 'play' | 'skip' | 'start';
 }
+
+export interface LyricLine {
+  /** Seconds from the start of the track. */
+  t: number;
+  text: string;
+}
+
+/** Lyrics are fetched from LRCLIB at request time and are never stored by this app. */
+export interface LyricsResponse {
+  found: boolean;
+  /** Why nothing is shown when found is false. */
+  reason?: 'no_title' | 'not_found' | 'unavailable';
+  instrumental?: boolean;
+  trackName?: string;
+  artistName?: string;
+  plain?: string;
+  /** Time-stamped lines when the source has them. */
+  synced?: LyricLine[];
+}

@@ -6,6 +6,7 @@ import {
   AddSongResponseData,
   AdminRoomItem,
   ServerToClientMessage,
+  LyricsResponse,
 } from '@qr-music/shared';
 
 // Where the music API lives. Empty = same origin (local dev: Vite proxies /api to the Worker on :3001).
@@ -121,6 +122,9 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ youtubeUrl, requestId: uuid() }),
     }),
+
+  getLyrics: (code: string, songId: string) =>
+    request<LyricsResponse>(`/rooms/${code}/songs/${songId}/lyrics`),
 
   // Player-only (require player token stored in localStorage)
   nextSong: (code: string) =>

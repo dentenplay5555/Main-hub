@@ -11,7 +11,7 @@ export const Navbar: React.FC<NavbarProps> = ({ roomCode, roomName }) => {
   const location = useLocation();
 
   return (
-    <header className="sticky top-0 z-40 w-full bg-slate-950/90 backdrop-blur-md border-b border-slate-800/90 px-4 lg:px-8 py-3 flex items-center justify-between">
+    <header className="sticky top-0 z-40 w-full bg-slate-950/90 backdrop-blur-md border-b border-slate-800/90 px-4 lg:px-8 py-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
       {/* Brand */}
       <Link to="/" className="flex items-center gap-2.5 group">
         <div className="w-8 h-8 rounded-lg bg-amber-400/10 border border-amber-400/30 flex items-center justify-center text-amber-400 group-hover:scale-105 transition-transform">
@@ -29,10 +29,10 @@ export const Navbar: React.FC<NavbarProps> = ({ roomCode, roomName }) => {
 
       {/* Center Room Badge if in room context */}
       {roomCode && (
-        <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-slate-900 border border-slate-800 text-xs">
+        <div className="order-last w-full justify-center sm:order-none sm:w-auto flex items-center gap-2 px-3 py-1 rounded-full bg-slate-900 border border-slate-800 text-xs min-w-0">
           <span className="w-2 h-2 rounded-full bg-emerald-400" />
           <span className="text-slate-400">ห้อง:</span>
-          <span className="font-bold text-white tracking-wide">{roomName || roomCode}</span>
+          <span className="font-bold text-white tracking-wide truncate">{roomName || roomCode}</span>
           <span className="text-slate-500 font-mono">({roomCode})</span>
         </div>
       )}

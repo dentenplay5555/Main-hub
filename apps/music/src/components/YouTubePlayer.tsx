@@ -5,6 +5,8 @@ export interface YouTubePlayerHandle {
   pauseVideo: () => void;
   playVideo: () => void;
   startJukebox: () => void;
+  /** Seconds into the current video, or 0 when the player is not ready. */
+  getCurrentTime: () => number;
 }
 
 interface YouTubePlayerProps {
@@ -88,6 +90,14 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>
 
     // Expose control methods to parent via ref
     useImperativeHandle(ref, () => ({
+      getCurrentTime: () => {
+        const p = playerRef.current;
+        try {
+          return p && typeof p.getCurrentTime === 'function' ? Number(p.getCurrentTime()) || 0 : 0;
+        } catch {
+          return 0;
+        }
+      },
       pauseVideo: () => {
         pausedByCommandRef.current = true;
         const p = playerRef.current;

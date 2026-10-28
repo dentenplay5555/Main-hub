@@ -3,6 +3,7 @@ import { useParams, useSearchParams } from 'react-router-dom';
 import { Navbar } from '../components/Navbar';
 import { QRCodeDisplay } from '../components/QRCodeDisplay';
 import { YouTubePlayer } from '../components/YouTubePlayer';
+import { LyricsPanel } from '../components/LyricsPanel';
 import { api, connectRoomWebSocket } from '../api/client';
 import { QueueSnapshot, Song } from '@qr-music/shared';
 import {
@@ -45,6 +46,7 @@ export const PlayerPage: React.FC = () => {
   const [playerStateDisplay, setPlayerStateDisplay] = useState<string>('Ready');
 
   const ytRef = useRef<import('../components/YouTubePlayer').YouTubePlayerHandle>(null);
+  const getVideoTime = React.useCallback(() => ytRef.current?.getCurrentTime() ?? 0, []);
 
   const loadQueue = async () => {
     if (!roomCode) return;
@@ -273,6 +275,15 @@ export const PlayerPage: React.FC = () => {
             <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800 text-center text-sm text-slate-400">
               ไม่มีเพลงที่กำลังเล่นอยู่ สแกน QR Code เพื่อส่งเพลงได้ทันที
             </div>
+          )}
+
+          {currentSong && roomCode && (
+            <LyricsPanel
+              roomCode={roomCode}
+              songId={currentSong.id}
+              songTitle={currentSong.title}
+              getTime={getVideoTime}
+            />
           )}
         </div>
 
