@@ -115,7 +115,11 @@ export function validateContent(content: QRContent): ValidationResult {
       if (!content.url.trim()) {
         errors.push('Profile URL is required.');
       } else if (!isValidURL(content.url)) {
-        errors.push('Please enter a valid URL.');
+        if (isValidURL(`https://${content.url.trim()}`)) {
+          warnings.push('URL does not include a protocol. "https://" will be assumed.');
+        } else {
+          errors.push('Please enter a valid URL.');
+        }
       }
       break;
 

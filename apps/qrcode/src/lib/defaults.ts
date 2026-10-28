@@ -4,14 +4,15 @@ export const defaultDesign: QRDesignSettings = {
   dotType: 'square',
   cornerSquareType: 'square',
   cornerDotType: 'square',
-  foreground: { type: 'solid', color: '#ffffff' },
-  background: { type: 'solid', color: '#0a0e1a' },
-  cornerSquareColor: { type: 'solid', color: '#ffffff' },
-  cornerDotColor: { type: 'solid', color: '#ffffff' },
+  // Dark modules on a light background: the combination every scanner reads.
+  foreground: { type: 'solid', color: '#0f172a' },
+  background: { type: 'solid', color: '#ffffff' },
+  cornerSquareColor: { type: 'solid', color: '#0f172a' },
+  cornerDotColor: { type: 'solid', color: '#0f172a' },
   errorCorrection: 'M',
   width: 1024,
   height: 1024,
-  margin: 20,
+  margin: 80,
   logo: {
     enabled: false,
     src: '',
@@ -26,7 +27,7 @@ export const defaultDesign: QRDesignSettings = {
     fontSize: 16,
     fontWeight: 'bold',
     textColor: '#ffffff',
-    frameColor: '#252d3f',
+    frameColor: '#0f172a',
     padding: 16,
   },
 };
@@ -37,8 +38,8 @@ export const defaultSettings: AppSettings = {
   defaultExportWidth: 1024,
   defaultExportHeight: 1024,
   defaultErrorCorrection: 'M',
-  defaultForegroundColor: '#ffffff',
-  defaultBackgroundColor: '#0a0e1a',
+  defaultForegroundColor: '#0f172a',
+  defaultBackgroundColor: '#ffffff',
   scannerHistoryEnabled: true,
   continuousScanning: false,
 };
@@ -60,7 +61,7 @@ export const builtInPresets: DesignPreset[] = [
       errorCorrection: 'M',
       width: 1024,
       height: 1024,
-      margin: 20,
+      margin: 80,
     },
   },
   {
@@ -79,7 +80,7 @@ export const builtInPresets: DesignPreset[] = [
       errorCorrection: 'M',
       width: 1024,
       height: 1024,
-      margin: 20,
+      margin: 80,
     },
   },
   {
@@ -109,7 +110,7 @@ export const builtInPresets: DesignPreset[] = [
       errorCorrection: 'M',
       width: 1024,
       height: 1024,
-      margin: 20,
+      margin: 80,
     },
   },
   {
@@ -128,7 +129,7 @@ export const builtInPresets: DesignPreset[] = [
       errorCorrection: 'Q',
       width: 1024,
       height: 1024,
-      margin: 20,
+      margin: 80,
     },
   },
   {
@@ -147,7 +148,7 @@ export const builtInPresets: DesignPreset[] = [
       errorCorrection: 'M',
       width: 1024,
       height: 1024,
-      margin: 20,
+      margin: 80,
     },
   },
   {
@@ -166,7 +167,7 @@ export const builtInPresets: DesignPreset[] = [
       errorCorrection: 'H',
       width: 1024,
       height: 1024,
-      margin: 24,
+      margin: 80,
     },
   },
   {
@@ -196,7 +197,7 @@ export const builtInPresets: DesignPreset[] = [
       errorCorrection: 'M',
       width: 1024,
       height: 1024,
-      margin: 20,
+      margin: 80,
     },
   },
   {
@@ -215,7 +216,7 @@ export const builtInPresets: DesignPreset[] = [
       errorCorrection: 'M',
       width: 1024,
       height: 1024,
-      margin: 20,
+      margin: 80,
     },
   },
 ];

@@ -5,7 +5,24 @@ import type { QRContent, WiFiContent, VCardContent, EmailContent, CalendarConten
  * Characters that need escaping: \ ; , " :
  */
 function escapeWiFiField(value: string): string {
-  return value.replace(/([\\;,":])/, '\\$1');
+  return value.replace(/([\\;,":])/g, '\\$1');
+}
+
+/** Escapes text values for vCard 3.0 and iCalendar: backslash, comma, semicolon and line breaks. */
+function escapeText(value: string): string {
+  return value
+    .replace(/\\/g, '\\\\')
+    .replace(/;/g, '\\;')
+    .replace(/,/g, '\\,')
+    .replace(/\r?\n/g, '\\n');
+}
+
+/** Adds https:// when a URL was typed without a protocol, matching the warning shown by validateContent. */
+export function normalizeURL(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed) return '';
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed)) return trimmed;
+  return `https://${trimmed}`;
 }
 
 function formatWiFiPayload(content: WiFiContent): string {
@@ -30,24 +47,24 @@ function formatVCardPayload(content: VCardContent): string {
 
   const fullName = [content.firstName, content.lastName].filter(Boolean).join(' ');
   if (fullName) {
-    lines.push(`FN:${fullName}`);
-    lines.push(`N:${content.lastName || ''};${content.firstName || ''};;;`);
+    lines.push(`FN:${escapeText(fullName)}`);
+    lines.push(`N:${escapeText(content.lastName || '')};${escapeText(content.firstName || '')};;;`);
   }
 
-  if (content.organization) lines.push(`ORG:${content.organization}`);
-  if (content.title) lines.push(`TITLE:${content.title}`);
+  if (content.organization) lines.push(`ORG:${escapeText(content.organization)}`);
+  if (content.title) lines.push(`TITLE:${escapeText(content.title)}`);
   if (content.phone) lines.push(`TEL:${content.phone}`);
   if (content.email) lines.push(`EMAIL:${content.email}`);
   if (content.website) lines.push(`URL:${content.website}`);
-  if (content.address) lines.push(`ADR:;;${content.address};;;;`);
-  if (content.note) lines.push(`NOTE:${content.note}`);
+  if (content.address) lines.push(`ADR:;;${escapeText(content.address)};;;;`);
+  if (content.note) lines.push(`NOTE:${escapeText(content.note)}`);
 
   lines.push('END:VCARD');
   return lines.join('\r\n');
 }
 
 function formatEmailPayload(content: EmailContent): string {
-  let uri = `mailto:${encodeURIComponent(content.address)}`;
+  let uri = `mailto:${content.address.trim()}`;
   const params: string[] = [];
   if (content.subject) params.push(`subject=${encodeURIComponent(content.subject)}`);
   if (content.body) params.push(`body=${encodeURIComponent(content.body)}`);
@@ -62,6 +79,12 @@ function padDatePart(value: string, time: string): string {
   return `${d}T${t}`;
 }
 
+function addOneDay(isoDate: string): string {
+  const d = new Date(`${isoDate}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().slice(0, 10).replace(/-/g, '');
+}
+
 function formatCalendarPayload(content: CalendarContent): string {
   const lines: string[] = [
     'BEGIN:VCALENDAR',
@@ -69,9 +92,9 @@ function formatCalendarPayload(content: CalendarContent): string {
     'BEGIN:VEVENT',
   ];
 
-  if (content.title) lines.push(`SUMMARY:${content.title}`);
-  if (content.description) lines.push(`DESCRIPTION:${content.description}`);
-  if (content.location) lines.push(`LOCATION:${content.location}`);
+  if (content.title) lines.push(`SUMMARY:${escapeText(content.title)}`);
+  if (content.description) lines.push(`DESCRIPTION:${escapeText(content.description)}`);
+  if (content.location) lines.push(`LOCATION:${escapeText(content.location)}`);
 
   if (content.startDate) {
     if (content.allDay) {
@@ -82,7 +105,8 @@ function formatCalendarPayload(content: CalendarContent): string {
   }
   if (content.endDate) {
     if (content.allDay) {
-      lines.push(`DTEND;VALUE=DATE:${content.endDate.replace(/-/g, '')}`);
+      // DTEND is exclusive for all-day events, while the form asks for the last day, so add one day.
+      lines.push(`DTEND;VALUE=DATE:${addOneDay(content.endDate)}`);
     } else {
       lines.push(`DTEND:${padDatePart(content.endDate, content.endTime || '00:00')}`);
     }
@@ -100,7 +124,7 @@ function formatCalendarPayload(content: CalendarContent): string {
 export function generatePayload(content: QRContent): string {
   switch (content.type) {
     case 'url':
-      return content.url;
+      return normalizeURL(content.url);
     case 'text':
       return content.text;
     case 'wifi':
@@ -115,7 +139,7 @@ export function generatePayload(content: QRContent): string {
       return uri;
     }
     case 'phone':
-      return `tel:${content.phone}`;
+      return `tel:${content.phone.replace(/[\s()-]/g, '')}`;
     case 'geo': {
       if (content.query) return `geo:0,0?q=${encodeURIComponent(content.query)}`;
       return `geo:${content.latitude},${content.longitude}`;
@@ -129,7 +153,7 @@ export function generatePayload(content: QRContent): string {
       return url;
     }
     case 'social':
-      return content.url;
+      return normalizeURL(content.url);
     case 'custom':
       return content.payload;
     default:
