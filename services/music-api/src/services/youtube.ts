@@ -51,7 +51,24 @@ export async function fetchYouTubeTitle(videoId: string): Promise<string | null>
 
 export type AutoplayResult =
   | { ok: true; videoId: string; title: string }
-  | { ok: false; reason: 'no_key' | 'no_result' | 'quota' | 'error' };
+  | { ok: false; reason: 'no_key' | 'no_result' | 'quota' | 'bad_key' | 'api_disabled' | 'key_restricted' | 'error'; detail?: string };
+
+/** Maps a Google API error response to a reason the admin can act on. 403 alone is ambiguous. */
+async function classifyFailure(res: Response): Promise<AutoplayResult> {
+  let reason = '';
+  let message = '';
+  try {
+    const body = (await res.json()) as { error?: { message?: string; errors?: { reason?: string }[] } };
+    reason = body.error?.errors?.[0]?.reason ?? '';
+    message = (body.error?.message ?? '').slice(0, 200);
+  } catch { /* body was not JSON */ }
+  const detail = `HTTP ${res.status}${reason ? ` ${reason}` : ''}${message ? `: ${message}` : ''}`;
+  if (reason === 'quotaExceeded' || reason === 'rateLimitExceeded' || res.status === 429) return { ok: false, reason: 'quota', detail };
+  if (reason === 'keyInvalid' || reason === 'badRequest' && /api key/i.test(message)) return { ok: false, reason: 'bad_key', detail };
+  if (reason === 'accessNotConfigured' || reason === 'forbidden' && /not been used|disabled/i.test(message)) return { ok: false, reason: 'api_disabled', detail };
+  if (reason === 'ipRefererBlocked' || reason === 'referrerNotAllowed' || /referer|restriction/i.test(message)) return { ok: false, reason: 'key_restricted', detail };
+  return { ok: false, reason: 'error', detail };
+}
 
 const MAX_AUTOPLAY_SECONDS = 10 * 60;
 
@@ -100,8 +117,7 @@ export async function findAutoplayVideo(
     const searchRes = await fetch(`${apiBase}/search?${searchParams}`, {
       signal: AbortSignal.timeout(5000),
     });
-    if (searchRes.status === 403 || searchRes.status === 429) return { ok: false, reason: 'quota' };
-    if (!searchRes.ok) return { ok: false, reason: 'error' };
+    if (!searchRes.ok) return classifyFailure(searchRes);
 
     const searchData = (await searchRes.json()) as {
       items?: { id?: { videoId?: string }; snippet?: { title?: string } }[];
@@ -119,8 +135,7 @@ export async function findAutoplayVideo(
     const detailRes = await fetch(`${apiBase}/videos?${detailParams}`, {
       signal: AbortSignal.timeout(5000),
     });
-    if (detailRes.status === 403 || detailRes.status === 429) return { ok: false, reason: 'quota' };
-    if (!detailRes.ok) return { ok: false, reason: 'error' };
+    if (!detailRes.ok) return classifyFailure(detailRes);
 
     const detailData = (await detailRes.json()) as {
       items?: { id: string; contentDetails?: { duration?: string }; status?: { embeddable?: boolean } }[];
@@ -135,7 +150,7 @@ export async function findAutoplayVideo(
     const pick = candidates.find((c) => usable.get(c.id));
     if (!pick) return { ok: false, reason: 'no_result' };
     return { ok: true, videoId: pick.id, title: pick.title.trim() || pick.id };
-  } catch {
-    return { ok: false, reason: 'error' };
+  } catch (e) {
+    return { ok: false, reason: 'error', detail: e instanceof Error ? e.message.slice(0, 200) : 'network error' };
   }
 }

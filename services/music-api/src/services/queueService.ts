@@ -569,7 +569,7 @@ export async function fillFromAutoplay(
 
     const found = await findAutoplayVideo(env.YOUTUBE_API_KEY, seed.title, exclude, env.YOUTUBE_API_BASE || undefined);
     if (!found.ok) {
-      await logRoomEvent(db, room.id, 'autoplay.failed', { reason: found.reason, seed: seed.title });
+      await logRoomEvent(db, room.id, 'autoplay.failed', { reason: found.reason, detail: 'detail' in found ? found.detail : undefined, seed: seed.title });
       return null;
     }
 
