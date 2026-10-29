@@ -20,6 +20,18 @@ function colorOption(config: ColorConfig) {
   return { color: config.color };
 }
 
+/**
+ * qr-code-styling writes each character as ONE byte (its char code & 0xFF), so any character above
+ * U+00FF is corrupted: Thai "ส" (U+0E2A) becomes "*". Handing it the UTF-8 bytes as a binary string
+ * produces the standard UTF-8 payload that phone scanners expect.
+ */
+export function toUtf8Binary(text: string): string {
+  const bytes = new TextEncoder().encode(text);
+  let out = '';
+  for (let i = 0; i < bytes.length; i++) out += String.fromCharCode(bytes[i]);
+  return out;
+}
+
 /** Options for qr-code-styling. `size` is the pixel size of the QR itself (without any frame). */
 export function buildQROptions(payload: string, design: QRDesignSettings, size: number): QROptions {
   const hasLogo = design.logo.enabled && !!design.logo.src;
@@ -28,7 +40,7 @@ export function buildQROptions(payload: string, design: QRDesignSettings, size: 
     width: size,
     height: size,
     type: 'canvas',
-    data: payload || PLACEHOLDER,
+    data: toUtf8Binary(payload || PLACEHOLDER),
     margin: Math.round((design.margin / MARGIN_REFERENCE) * size),
     qrOptions: { errorCorrectionLevel: design.errorCorrection },
     dotsOptions: { type: design.dotType, ...colorOption(design.foreground) },

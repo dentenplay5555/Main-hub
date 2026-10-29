@@ -144,6 +144,7 @@ npm run dev -w apps/music                         # เว็บ :5173 (proxy /a
 - rate limit ต่อผู้ใช้ และกฎจำนวนครั้งที่ส่ง (Pretest 1, Cycle 1/2 รอบละ 3, Post Test 1) ที่ต้องบังคับฝั่ง gateway/DB
 - รายงานครูแบบสรุป (กระจายคะแนน ระดับความรู้ flag รายห้อง) ซึ่งตอนนี้มีแค่ข้อมูลดิบจาก `/v1/teacher/scores`
 - ย้าย engine CbKST จาก `apps/exam/server/cbkst.ts` เข้า gateway
+- QR Studio (`apps/qrcode`) ทำงานในเบราว์เซอร์ทั้งหมด ไม่มี API: ตั้ง repo Variable `INCLUDE_QRCODE=1` เพื่อเผยแพร่และเปิด tile ใน Hub (ข้อมูลเก็บใน IndexedDB ของเบราว์เซอร์ ใช้กล้องสแกนได้เฉพาะ https หรือ localhost)
 - Learning System (รวม Dashboard) และ Weather ยังเป็น "เร็ว ๆ นี้" ใน Hub (Music Player จะขึ้นเมื่อตั้ง `INCLUDE_MUSIC=1`)
 - ตัวสลับแอปมีเฉพาะหน้า Hub ยังไม่ได้ฝังในแต่ละแอป
 - ล็อกอินของ exam บน GitHub Pages: API คนละโดเมนกับหน้าเว็บ ทำให้ cookie ใช้ไม่ได้ ต้องย้ายมาใช้ token ผ่าน gateway ก่อนค่อยตั้ง `INCLUDE_EXAM=1`

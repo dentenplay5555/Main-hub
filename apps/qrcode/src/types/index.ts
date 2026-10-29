@@ -218,7 +218,6 @@ export type ThemeMode = 'light' | 'dark' | 'system';
 
 export interface AppSettings {
   theme: ThemeMode;
-  language: 'en' | 'th';
   defaultExportWidth: number;
   defaultExportHeight: number;
   defaultErrorCorrection: ErrorCorrectionLevel;

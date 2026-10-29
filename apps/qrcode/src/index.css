@@ -3,6 +3,42 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    --studio-bg: 10 14 26;
+    --studio-surface: 17 24 39;
+    --studio-panel: 26 32 53;
+    --studio-border: 37 45 63;
+    --studio-border-hover: 59 71 102;
+    --studio-text: 232 236 244;
+    --studio-muted: 136 150 179;
+    --studio-accent: 99 102 241;
+    --studio-accent-hover: 129 140 248;
+    --studio-accent-dim: 79 70 229;
+    --studio-success: 34 197 94;
+    --studio-warning: 245 158 11;
+    --studio-error: 239 68 68;
+    color-scheme: dark;
+  }
+  :root.light {
+    --studio-bg: 244 246 251;
+    --studio-surface: 255 255 255;
+    --studio-panel: 238 241 248;
+    --studio-border: 214 220 232;
+    --studio-border-hover: 176 186 208;
+    --studio-text: 15 23 42;
+    --studio-muted: 91 103 130;
+    --studio-accent: 79 70 229;
+    --studio-accent-hover: 99 102 241;
+    --studio-accent-dim: 67 56 202;
+    --studio-success: 22 163 74;
+    --studio-warning: 180 83 9;
+    --studio-error: 220 38 38;
+    color-scheme: light;
+  }
+}
+
+
+@layer base {
   * {
     box-sizing: border-box;
   }
@@ -28,17 +64,17 @@
   }
 
   ::-webkit-scrollbar-thumb {
-    background: #252d3f;
+    background: rgb(var(--studio-border));
     border-radius: 4px;
   }
 
   ::-webkit-scrollbar-thumb:hover {
-    background: #3b4766;
+    background: rgb(var(--studio-border-hover));
   }
 
   /* Focus ring: accessible visible indicator */
   *:focus-visible {
-    outline: 2px solid #6366f1;
+    outline: 2px solid rgb(var(--studio-accent));
     outline-offset: 2px;
   }
 
@@ -129,13 +165,13 @@
   /* Checkerboard for transparent preview */
   .checkerboard {
     background-image:
-      linear-gradient(45deg, #1a2035 25%, transparent 25%),
-      linear-gradient(-45deg, #1a2035 25%, transparent 25%),
-      linear-gradient(45deg, transparent 75%, #1a2035 75%),
-      linear-gradient(-45deg, transparent 75%, #1a2035 75%);
+      linear-gradient(45deg, rgb(var(--studio-panel)) 25%, transparent 25%),
+      linear-gradient(-45deg, rgb(var(--studio-panel)) 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, rgb(var(--studio-panel)) 75%),
+      linear-gradient(-45deg, transparent 75%, rgb(var(--studio-panel)) 75%);
     background-size: 16px 16px;
     background-position: 0 0, 0 8px, 8px -8px, -8px 0px;
-    background-color: #0f1525;
+    background-color: rgb(var(--studio-surface));
   }
 }
 

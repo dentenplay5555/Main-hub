@@ -34,7 +34,6 @@ export const defaultDesign: QRDesignSettings = {
 
 export const defaultSettings: AppSettings = {
   theme: 'dark',
-  language: 'en',
   defaultExportWidth: 1024,
   defaultExportHeight: 1024,
   defaultErrorCorrection: 'M',

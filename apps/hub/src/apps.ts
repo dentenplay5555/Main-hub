@@ -4,6 +4,8 @@ const includeExam = import.meta.env.VITE_INCLUDE_EXAM === '1';
 const includeLearning = import.meta.env.VITE_INCLUDE_LEARNING === '1';
 // Set by scripts/build.mjs (INCLUDE_MUSIC=1). Off = the music tile shows as "เร็ว ๆ นี้" and is not published.
 const includeMusic = import.meta.env.VITE_INCLUDE_MUSIC === '1';
+// Set by scripts/build.mjs (INCLUDE_QRCODE=1). Fully client-side, so it needs no API.
+const includeQrcode = import.meta.env.VITE_INCLUDE_QRCODE === '1';
 
 export interface AppEntry {
   id: string;
@@ -44,6 +46,13 @@ export const apps: AppEntry[] = [
     description: 'ขอเพลงผ่าน QR สำหรับกิจกรรม',
     color: '#f472b6',
     href: includeMusic ? `${base}music/` : undefined,
+  },
+  {
+    id: 'qrcode',
+    name: 'QR Studio',
+    description: 'สร้าง สแกน และออกแบบ QR code (ทำงานในเบราว์เซอร์ทั้งหมด)',
+    color: '#22d3ee',
+    href: includeQrcode ? `${base}qrcode/` : undefined,
   },
   {
     id: 'electrical',

@@ -4,6 +4,7 @@
 //   dist/learning/   -> apps/learning (talks to the gateway) — ONLY when INCLUDE_LEARNING=1
 //   dist/music/      -> apps/music (frontend only; its API Worker, services/music-api, is deployed separately) — ONLY when INCLUDE_MUSIC=1
 //                       Set VITE_MUSIC_API_BASE to the Worker's origin or the published page cannot reach its API.
+//   dist/qrcode/     -> apps/qrcode (fully client-side, no API) — ONLY when INCLUDE_QRCODE=1
 // HUB_BASE = URL prefix the site is served under. "/<repo>/" for a GitHub project page, "/" for a custom domain.
 // INCLUDE_EXAM=1 publishes the exam app and turns its tile on in the Hub. Leave it unset until exam login works.
 import { execSync } from 'node:child_process';
@@ -18,15 +19,18 @@ if (!base.endsWith('/')) base += '/';
 const includeExam = process.env.INCLUDE_EXAM === '1';
 const includeLearning = process.env.INCLUDE_LEARNING === '1';
 const includeMusic = process.env.INCLUDE_MUSIC === '1';
+const includeQrcode = process.env.INCLUDE_QRCODE === '1';
 const env = {
   ...process.env,
   HUB_BASE: base,
   EXAM_BASE: `${base}exam/`,
   LEARNING_BASE: `${base}learning/`,
   MUSIC_BASE: `${base}music/`,
+  QRCODE_BASE: `${base}qrcode/`,
   VITE_INCLUDE_EXAM: includeExam ? '1' : '0',
   VITE_INCLUDE_LEARNING: includeLearning ? '1' : '0',
   VITE_INCLUDE_MUSIC: includeMusic ? '1' : '0',
+  VITE_INCLUDE_QRCODE: includeQrcode ? '1' : '0',
 };
 const run = (cmd) => execSync(cmd, { cwd: root, stdio: 'inherit', env });
 
@@ -34,6 +38,7 @@ run('npm run build -w apps/hub');
 if (includeExam) run('npm run build -w apps/exam');
 if (includeLearning) run('npm run build -w apps/learning');
 if (includeMusic) run('npm run build -w apps/music');
+if (includeQrcode) run('npm run build -w apps/qrcode');
 
 const dist = resolve(root, 'dist');
 rmSync(dist, { recursive: true, force: true });
@@ -42,6 +47,7 @@ cpSync(resolve(root, 'apps/hub/dist'), dist, { recursive: true });
 if (includeExam) cpSync(resolve(root, 'apps/exam/dist'), resolve(dist, 'exam'), { recursive: true });
 if (includeLearning) cpSync(resolve(root, 'apps/learning/dist'), resolve(dist, 'learning'), { recursive: true });
 if (includeMusic) cpSync(resolve(root, 'apps/music/dist'), resolve(dist, 'music'), { recursive: true });
+if (includeQrcode) cpSync(resolve(root, 'apps/qrcode/dist'), resolve(dist, 'qrcode'), { recursive: true });
 
 // GitHub Pages serves only the root 404.html for unknown paths. Send deep links of the exam and music SPAs
 // back to /<app>/?r=<route>; each app's index.html restores the real URL (see apps/exam/index.html, apps/music/index.html).
@@ -67,7 +73,7 @@ const notFound = `<!doctype html>
 writeFileSync(resolve(dist, '404.html'), notFound);
 writeFileSync(resolve(dist, '.nojekyll'), '');
 
-for (const f of ['index.html', '404.html', ...(includeExam ? ['exam/index.html'] : []), ...(includeLearning ? ['learning/index.html'] : []), ...(includeMusic ? ['music/index.html'] : [])]) {
+for (const f of ['index.html', '404.html', ...(includeExam ? ['exam/index.html'] : []), ...(includeLearning ? ['learning/index.html'] : []), ...(includeMusic ? ['music/index.html'] : []), ...(includeQrcode ? ['qrcode/index.html'] : [])]) {
   if (!existsSync(resolve(dist, f))) throw new Error(`missing in dist: ${f}`);
 }
-console.log(`\nBuilt site for base ${base} -> ${dist} (exam ${includeExam ? 'included' : 'NOT included'}, learning ${includeLearning ? 'included' : 'NOT included'}, music ${includeMusic ? 'included' : 'NOT included'})`);
+console.log(`\nBuilt site for base ${base} -> ${dist} (exam ${includeExam ? 'included' : 'NOT included'}, learning ${includeLearning ? 'included' : 'NOT included'}, music ${includeMusic ? 'included' : 'NOT included'}, qrcode ${includeQrcode ? 'included' : 'NOT included'})`);

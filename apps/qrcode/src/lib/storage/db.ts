@@ -97,9 +97,22 @@ export async function deletePreset(id: string): Promise<void> {
 
 // ── Scan History ─────────────────────────────────────────────────────────────
 
+const MAX_SCAN_HISTORY = 100;
+
 export async function saveScanResult(result: ScanResult): Promise<void> {
   const db = await getDB();
   await db.put('scanHistory', result);
+  // Keep the history bounded: drop the oldest entries beyond the cap.
+  const count = await db.count('scanHistory');
+  if (count > MAX_SCAN_HISTORY) {
+    const oldest = await db.getAllKeysFromIndex('scanHistory', 'by-timestamp', undefined, count - MAX_SCAN_HISTORY);
+    await Promise.all(oldest.map(k => db.delete('scanHistory', k)));
+  }
+}
+
+export async function deleteScanResult(id: string): Promise<void> {
+  const db = await getDB();
+  await db.delete('scanHistory', id);
 }
 
 export async function getScanHistory(): Promise<ScanResult[]> {
