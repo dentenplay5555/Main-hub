@@ -42,26 +42,52 @@ export function splitArtistTitle(title: string): { artist: string; track: string
   return artist && track ? { artist, track } : null;
 }
 
+// Channel names like "Haddaway - Topic", "HaddawayVEVO" or "Twice Official" -> the bare artist name.
+export function cleanChannelName(name: string | null | undefined): string {
+  if (!name) return '';
+  return name
+    .replace(/\s*[-–]\s*topic$/i, '')
+    .replace(/vevo$/i, '')
+    .replace(/\b(official|channel|music|records|entertainment)\b/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 /**
  * Picks the result that really is this song, or null. A wrong set of lyrics is worse than none, so the
- * result's track name must appear inside the video title.
+ * result's track name must appear inside the video title. Many songs share a name ("What Is Love" by
+ * Haddaway, Twice, Jennifer Lopez...), so the artist has to show up in the title or the channel name.
+ * When several different artists match the track name and none of them is named, there is no safe answer.
  */
-export function pickBestMatch(videoTitle: string, results: LrclibTrack[]): LrclibTrack | null {
-  const haystack = normalizeForMatch(cleanVideoTitle(videoTitle));
-  let best: { track: LrclibTrack; score: number } | null = null;
+export function pickBestMatch(videoTitle: string, results: LrclibTrack[], channel?: string | null): LrclibTrack | null {
+  const title = normalizeForMatch(cleanVideoTitle(videoTitle));
+  const chan = normalizeForMatch(cleanChannelName(channel));
+  const haystack = `${title} ${chan}`.trim();
+  const named = (artist: string) => artist.length >= 2 && (` ${haystack} `).includes(` ${artist} `);
+
+  const candidates: { track: LrclibTrack; score: number; artistNamed: boolean; artist: string }[] = [];
   for (const r of results) {
     if (!r.trackName) continue;
     const name = normalizeForMatch(r.trackName);
-    if (name.length < 2 || !haystack.includes(name)) continue;
+    if (name.length < 2 || !title.includes(name)) continue;
     if (!r.instrumental && !r.plainLyrics && !r.syncedLyrics) continue;
-    let score = 1;
     const artist = r.artistName ? normalizeForMatch(r.artistName) : '';
-    if (artist && haystack.includes(artist)) score += 2;
+    const artistNamed = named(artist);
+    let score = 1;
+    if (artistNamed) score += 4;
     if (r.syncedLyrics) score += 1;
     if (r.instrumental) score -= 0.5;
-    if (!best || score > best.score) best = { track: r, score };
+    candidates.push({ track: r, score, artistNamed, artist });
   }
-  return best?.track ?? null;
+  if (candidates.length === 0) return null;
+
+  candidates.sort((a, b) => b.score - a.score);
+  const top = candidates[0];
+  if (!top.artistNamed) {
+    const artists = new Set(candidates.map(c => c.artist));
+    if (artists.size > 1) return null;
+  }
+  return top.track;
 }
 
 // [mm:ss.xx] text, with one or more timestamps per line. Tags like [ar:...] are skipped.
@@ -90,16 +116,24 @@ async function search(base: string, params: Record<string, string>): Promise<Lrc
   return Array.isArray(data) ? (data as LrclibTrack[]).slice(0, 20) : [];
 }
 
-export async function findLyrics(videoTitle: string, base = DEFAULT_BASE): Promise<LyricsResponse> {
+export async function findLyrics(videoTitle: string, base = DEFAULT_BASE, channel?: string | null): Promise<LyricsResponse> {
   const query = cleanVideoTitle(videoTitle);
   if (!query) return { found: false, reason: 'no_title' };
+  const artistHint = cleanChannelName(channel);
 
   try {
-    let match = pickBestMatch(videoTitle, await search(base, { q: query }));
+    // Putting the channel name in the query steers LRCLIB to the right artist for common song names.
+    let match = pickBestMatch(videoTitle, await search(base, { q: artistHint ? `${query} ${artistHint}` : query }), channel);
+    if (!match && artistHint) {
+      match = pickBestMatch(videoTitle, await search(base, { track_name: query, artist_name: artistHint }), channel);
+    }
+    if (!match && artistHint) {
+      match = pickBestMatch(videoTitle, await search(base, { q: query }), channel);
+    }
     if (!match) {
       const parts = splitArtistTitle(videoTitle);
       if (parts) {
-        match = pickBestMatch(videoTitle, await search(base, { track_name: parts.track, artist_name: parts.artist }));
+        match = pickBestMatch(videoTitle, await search(base, { track_name: parts.track, artist_name: parts.artist }), channel);
       }
     }
     if (!match) return { found: false, reason: 'not_found' };

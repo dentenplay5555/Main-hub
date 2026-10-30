@@ -132,6 +132,13 @@ export const api = {
       `/rooms/${code}/player/next`,
       { method: 'POST' }
     ),
+  getPlayerAutoplay: (code: string) =>
+    request<{ autoplay: boolean; available: boolean }>(`/rooms/${code}/player/autoplay`),
+  setPlayerAutoplay: (code: string, enabled: boolean) =>
+    request<{ autoplay: boolean; available: boolean }>(`/rooms/${code}/player/autoplay`, {
+      method: 'PUT',
+      body: JSON.stringify({ enabled }),
+    }),
   sendPlayerHeartbeat: (code: string, status: string) =>
     request<{ status: string; success: boolean }>(`/rooms/${code}/player/heartbeat`, {
       method: 'POST',

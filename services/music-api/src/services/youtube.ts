@@ -30,6 +30,11 @@ export function extractVideoId(rawUrl: string): string | null {
 }
 
 export async function fetchYouTubeTitle(videoId: string): Promise<string | null> {
+  return (await fetchYouTubeInfo(videoId))?.title ?? null;
+}
+
+/** Title plus channel name from oEmbed. The channel is often the artist ("Haddaway", "Twice - Topic"). */
+export async function fetchYouTubeInfo(videoId: string): Promise<{ title: string | null; author: string | null } | null> {
   try {
     const oembedUrl = `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`;
     const res = await fetch(oembedUrl, {
@@ -40,8 +45,8 @@ export async function fetchYouTubeTitle(videoId: string): Promise<string | null>
     });
 
     if (res.ok) {
-      const data = (await res.json()) as { title?: string };
-      return data.title?.trim() || null;
+      const data = (await res.json()) as { title?: string; author_name?: string };
+      return { title: data.title?.trim() || null, author: data.author_name?.trim() || null };
     }
     return null;
   } catch {

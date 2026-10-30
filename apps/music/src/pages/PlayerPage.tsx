@@ -39,6 +39,7 @@ export const PlayerPage: React.FC = () => {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [wsStatus, setWsStatus] = useState<'connecting' | 'connected' | 'disconnected'>('connecting');
   const [showAdTips, setShowAdTips] = useState(false);
+  const [autoplay, setAutoplay] = useState<{ on: boolean; available: boolean; busy: boolean; error: string | null } | null>(null);
 
   // Store playerState in a ref so heartbeat always sends the latest value
   // without adding it to useEffect dependency array.
@@ -57,6 +58,38 @@ export const PlayerPage: React.FC = () => {
       );
     } catch (err) {
       console.error('Failed to load queue:', err);
+    }
+  };
+
+  const loadAutoplay = React.useCallback(async () => {
+    if (!roomCode || !canControl) return;
+    try {
+      const a = await api.getPlayerAutoplay(roomCode);
+      setAutoplay((prev) => ({ on: a.autoplay, available: a.available, busy: prev?.busy ?? false, error: prev?.error ?? null }));
+    } catch {
+      setAutoplay(null);
+    }
+  }, [roomCode, canControl]);
+
+  useEffect(() => {
+    void loadAutoplay();
+  }, [loadAutoplay]);
+
+  const toggleAutoplay = async () => {
+    if (!roomCode || !autoplay || autoplay.busy) return;
+    const next = !autoplay.on;
+    setAutoplay({ ...autoplay, busy: true, error: null });
+    try {
+      const a = await api.setPlayerAutoplay(roomCode, next);
+      setAutoplay({ on: a.autoplay, available: a.available, busy: false, error: null });
+      loadQueue();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : '';
+      setAutoplay({
+        ...autoplay,
+        busy: false,
+        error: msg.includes('AUTOPLAY_UNAVAILABLE') ? 'เซิร์ฟเวอร์ยังไม่มี YOUTUBE_API_KEY จึงเปิด Autoplay ไม่ได้' : 'เปลี่ยน Autoplay ไม่สำเร็จ ลองอีกครั้ง',
+      });
     }
   };
 
@@ -108,6 +141,8 @@ export const PlayerPage: React.FC = () => {
           msg.type === 'song.skipped'
         ) {
           loadQueue();
+        } else if (msg.type === 'room.updated') {
+          void loadAutoplay();
         } else if (msg.type === 'player.command') {
           const cmd = (msg.payload as any)?.command;
           if (cmd === 'pause') {
@@ -155,11 +190,11 @@ export const PlayerPage: React.FC = () => {
     <div className={`min-h-screen flex flex-col bg-slate-950 text-slate-100 ${isFullscreen ? 'bg-black' : ''}`}>
       {!isFullscreen && <Navbar roomCode={roomCode} roomName={room?.name} />}
 
-      <main className="flex-1 max-w-7xl mx-auto w-full p-4 lg:p-6 flex flex-col lg:flex-row gap-6">
+      <main className="flex-1 max-w-screen-2xl mx-auto w-full p-4 lg:p-6 flex flex-col lg:flex-row gap-6">
         {/* Left Column: Player and Now Playing */}
         <div className="flex-1 flex flex-col gap-4">
           {/* Top Bar */}
-          <div className="flex items-center justify-between bg-slate-900 border border-slate-800 px-4 py-2.5 rounded-xl">
+          <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-900 border border-slate-800 px-4 py-2.5 rounded-xl">
             <div className="flex items-center gap-2.5">
               <span
                 className={`w-2.5 h-2.5 rounded-full ${
@@ -178,6 +213,23 @@ export const PlayerPage: React.FC = () => {
             </div>
 
             <div className="flex items-center gap-2">
+              {autoplay && (
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={autoplay.on}
+                  aria-busy={autoplay.busy}
+                  onClick={toggleAutoplay}
+                  title="เมื่อคิวหมด ให้หาเพลงที่คล้ายกันจาก YouTube มาเล่นต่อ"
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
+                >
+                  <span className={`relative inline-block w-8 h-4 rounded-full transition-colors ${autoplay.on ? 'bg-emerald-500' : 'bg-slate-600'}`} aria-hidden="true">
+                    <span className={`absolute top-0.5 left-0.5 w-3 h-3 rounded-full bg-white transition-transform ${autoplay.on ? 'translate-x-4' : ''}`} />
+                  </span>
+                  <span>Autoplay</span>
+                </button>
+              )}
+
               <button
                 type="button"
                 onClick={() => setShowAdTips(!showAdTips)}
@@ -217,6 +269,12 @@ export const PlayerPage: React.FC = () => {
             </div>
           </div>
 
+          {autoplay?.error && (
+            <p role="alert" className="px-3 py-2 rounded-lg bg-rose-500/10 border border-rose-500/30 text-xs text-rose-300">
+              {autoplay.error}
+            </p>
+          )}
+
           {/* Ad Tips Info Box (Collapsible) */}
           {showAdTips && (
             <div className="p-3.5 rounded-xl bg-slate-900 border border-emerald-500/40 text-xs text-slate-300 flex items-start gap-2.5">
@@ -235,15 +293,30 @@ export const PlayerPage: React.FC = () => {
             </div>
           )}
 
-          {/* YouTube Player */}
-          <div className="w-full">
-            <YouTubePlayer
-              ref={ytRef}
-              videoId={currentSong?.video_id || null}
-              playKey={currentSong?.id ?? null}
-              onEnded={handleSongEnded}
-              onStateChange={handleStateChange}
-            />
+          {/* YouTube Player, with the lyrics beside it on wide screens so nothing gets pushed down */}
+          <div className={currentSong && roomCode ? 'grid gap-4 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]' : ''}>
+            <div className="w-full min-w-0">
+              <YouTubePlayer
+                ref={ytRef}
+                videoId={currentSong?.video_id || null}
+                playKey={currentSong?.id ?? null}
+                onEnded={handleSongEnded}
+                onStateChange={handleStateChange}
+              />
+            </div>
+            {currentSong && roomCode && (
+              <div className="relative min-w-0 lg:min-h-0">
+                <div className="lg:absolute lg:inset-0 lg:flex lg:flex-col">
+                  <LyricsPanel
+                    fill
+                    roomCode={roomCode}
+                    songId={currentSong.id}
+                    songTitle={currentSong.title}
+                    getTime={getVideoTime}
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Now Playing Details Bar */}
@@ -277,14 +350,6 @@ export const PlayerPage: React.FC = () => {
             </div>
           )}
 
-          {currentSong && roomCode && (
-            <LyricsPanel
-              roomCode={roomCode}
-              songId={currentSong.id}
-              songTitle={currentSong.title}
-              getTime={getVideoTime}
-            />
-          )}
         </div>
 
         {/* Right Column: QR Code and Up Next Queue */}

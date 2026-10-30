@@ -7,8 +7,10 @@ import {
   addSongToQueue,
   advanceQueue,
   recordPlayerHeartbeat,
+  parseRoomSettings,
+  updateRoomSettings,
 } from '../services/queueService';
-import { extractVideoId, fetchYouTubeTitle } from '../services/youtube';
+import { extractVideoId, fetchYouTubeTitle, fetchYouTubeInfo } from '../services/youtube';
 import { findLyrics } from '../services/lyrics';
 import { AddSongRequest, LyricsResponse } from '@qr-music/shared';
 import { playerAuthMiddleware } from '../middleware/auth';
@@ -209,7 +211,7 @@ publicRoutes.get('/rooms/:code/songs/:songId/lyrics', async (c) => {
 
   // Cache by video id: the same song is requested in many rooms and replayed often.
   const cache = (globalThis as unknown as { caches?: { default: Cache } }).caches?.default;
-  const cacheKey = new Request(`https://lyrics.cache.invalid/${song.video_id}`);
+  const cacheKey = new Request(`https://lyrics.cache.invalid/v2/${song.video_id}`);
   try {
     const hit = await cache?.match(cacheKey);
     if (hit) {
@@ -220,7 +222,9 @@ publicRoutes.get('/rooms/:code/songs/:songId/lyrics', async (c) => {
     // cache unavailable: fall through to a live lookup
   }
 
-  const data = await findLyrics(song.title, c.env.LYRICS_API_BASE || undefined);
+  // The channel name is usually the artist, which tells apart songs that share a title.
+  const info = await fetchYouTubeInfo(song.video_id);
+  const data = await findLyrics(song.title, c.env.LYRICS_API_BASE || undefined, info?.author);
   // Do not cache upstream failures for long; real "not found" answers can wait an hour, hits a day.
   const ttl = data.found ? 86400 : data.reason === 'unavailable' ? 0 : 3600;
   if (cache && ttl > 0) {
@@ -257,6 +261,35 @@ publicRoutes.post('/rooms/:code/player/next', playerAuthMiddleware, async (c) =>
     data: result,
     requestId,
   });
+});
+
+// 5.0 Autoplay switch for the player screen. Same player-token rule as skip, so spectators cannot change it.
+publicRoutes.get('/rooms/:code/player/autoplay', playerAuthMiddleware, async (c) => {
+  const room = await getRoomByCode(c.env.DB, c.req.param('code'));
+  const requestId = c.get('requestId');
+  if (!room) return c.json({ ok: false, error: { code: 'ROOM_NOT_FOUND', message: 'ไม่พบห้องที่ระบุ' }, requestId }, 404);
+  return c.json({ ok: true, data: { autoplay: parseRoomSettings(room.settings_json).autoplay, available: Boolean(c.env.YOUTUBE_API_KEY) }, requestId });
+});
+
+publicRoutes.put('/rooms/:code/player/autoplay', playerAuthMiddleware, async (c) => {
+  const room = await getRoomByCode(c.env.DB, c.req.param('code'));
+  const requestId = c.get('requestId');
+  if (!room) return c.json({ ok: false, error: { code: 'ROOM_NOT_FOUND', message: 'ไม่พบห้องที่ระบุ' }, requestId }, 404);
+  let enabled: unknown;
+  try {
+    enabled = ((await c.req.json()) as { enabled?: unknown }).enabled;
+  } catch {
+    enabled = undefined;
+  }
+  if (typeof enabled !== 'boolean') {
+    return c.json({ ok: false, error: { code: 'INVALID_JSON', message: 'ต้องส่ง enabled เป็น true หรือ false' }, requestId }, 400);
+  }
+  try {
+    const settings = await updateRoomSettings(c.env, room.id, { autoplay: enabled });
+    return c.json({ ok: true, data: { autoplay: settings.autoplay, available: Boolean(c.env.YOUTUBE_API_KEY) }, requestId });
+  } catch (err: unknown) {
+    return c.json({ ok: false, error: { code: 'SETTINGS_ERROR', message: err instanceof Error ? err.message : String(err) }, requestId }, 400);
+  }
 });
 
 // 5.1 Player Heartbeat — requires player token

@@ -9,6 +9,8 @@ interface LyricsPanelProps {
   songTitle: string | null;
   /** Seconds into the playing video. Used to follow time-stamped lyrics. */
   getTime: () => number;
+  /** On wide screens, stretch to the height of the parent instead of growing below it. */
+  fill?: boolean;
 }
 
 type State =
@@ -26,7 +28,7 @@ function readOpen(): boolean {
   }
 }
 
-export function LyricsPanel({ roomCode, songId, songTitle, getTime }: LyricsPanelProps) {
+export function LyricsPanel({ roomCode, songId, songTitle, getTime, fill = false }: LyricsPanelProps) {
   const [open, setOpen] = useState(readOpen);
   const [state, setState] = useState<State>({ kind: 'loading' });
   const [attempt, setAttempt] = useState(0);
@@ -97,7 +99,7 @@ export function LyricsPanel({ roomCode, songId, songTitle, getTime }: LyricsPane
   })();
 
   return (
-    <section className="rounded-2xl bg-slate-900 border border-slate-800" aria-label="เนื้อเพลง">
+    <section className={`rounded-2xl bg-slate-900 border border-slate-800 ${fill ? `flex flex-col ${open ? 'lg:h-full' : ''} lg:min-h-0` : ''}`} aria-label="เนื้อเพลง">
       <button
         type="button"
         onClick={toggle}
@@ -114,7 +116,7 @@ export function LyricsPanel({ roomCode, songId, songTitle, getTime }: LyricsPane
       </button>
 
       {open && (
-        <div id="lyrics-body" className="px-4 pb-4">
+        <div id="lyrics-body" className={`px-4 pb-4 ${fill ? 'lg:flex lg:flex-col lg:flex-1 lg:min-h-0' : ''}`}>
           {state.kind === 'loading' && (
             <p className="flex items-center gap-2 text-sm text-slate-400 py-6 justify-center" role="status">
               <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> กำลังค้นหาเนื้อเพลง
@@ -137,9 +139,9 @@ export function LyricsPanel({ roomCode, songId, songTitle, getTime }: LyricsPane
               <p className="text-xs text-slate-400 mb-2 truncate">
                 {state.data.trackName}{state.data.artistName ? ` · ${state.data.artistName}` : ''}
               </p>
-              <div ref={scrollRef} className="relative max-h-72 overflow-y-auto pr-2" tabIndex={0} aria-label="เนื้อเพลง เลื่อนอ่านได้">
+              <div ref={scrollRef} className={`relative overflow-y-auto pr-2 ${fill ? 'max-h-72 lg:max-h-none lg:flex-1 lg:min-h-0' : 'max-h-72'}`} tabIndex={0} aria-label="เนื้อเพลง เลื่อนอ่านได้">
                 {synced ? (
-                  <div className="space-y-2 py-24">
+                  <div className="space-y-2 py-16">
                     {synced.map((line, i) => (
                       <p
                         key={i}
